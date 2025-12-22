@@ -16,9 +16,9 @@ class _RootPageState extends State<RootPage> {
   int _currentIndex = 0;
 
   final _pages = const [
-    HomePage(),    // твоя текущая HomePage, но без bottomNavigationBar
-    ProfilePage(), // профиль (без bottomNavigationBar)
-    ShopPage(),    // магазин (без bottomNavigationBar)
+    HomePage(),    // текущая HomePage без bottomNavigationBar
+    ProfilePage(), // профиль
+    ShopPage(),    // магазин
     EditProfilePage()
   //  StatsPage(),   // заглушка
   ];

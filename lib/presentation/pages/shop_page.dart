@@ -148,17 +148,16 @@ class _ShopContent extends StatelessWidget {
           ),
           const Spacer(),
           // Место под небольшую иконку/доставку
-          Icon(Icons.local_shipping,
+          Icon(Icons.attach_money,
               color: Colors.white.withOpacity(0.9), size: 26),
         ],
       ),
     );
   }
 
-  // Вкладки "Темы / Аватары / Бусты / Награды"
   static Widget _buildCategoryTabs() {
-    const tabs = ['Темы', 'Аватары', 'Бусты', 'Награды'];
-    final selectedIndex = 3; // сейчас выбрана вкладка "Награды"
+    const tabs = ['Темы', 'Аватары', 'Награды'];
+    final selectedIndex = 2; // сейчас выбрана вкладка "Награды"
 
     return Container(
       padding: const EdgeInsets.all(4),

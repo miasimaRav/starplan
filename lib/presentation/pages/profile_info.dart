@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../data/database.dart';
+
 class EditProfilePage extends StatefulWidget {
-  // сюда потом можно передать профиль из БД
-  // final ProfileModel profile;
-  // const EditProfilePage({super.key, required this.profile});
+
 
   const EditProfilePage({super.key});
 
@@ -12,6 +12,9 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
+
+  Map<String, dynamic>? _userRow;
+
   // контроллеры для полей
   final _nameController = TextEditingController();
   final _registerDateController = TextEditingController();
@@ -23,23 +26,34 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   void initState() {
     super.initState();
-    // здесь потом подставишь данные из БД
-    // final p = widget.profile;
-    // _nameController.text = p.name;
-    // _registerDateController.text = p.registerDateString;
-    // _birthdayController.text = p.birthDateString;
-    // _emailController.text = p.email;
-    // _levelController.text = p.level.toString();
-    // _starsController.text = p.stars.toString();
-
-    // временные демо-значения
-    _nameController.text = 'Star User';
-    _registerDateController.text = '10.10.2025';
-    _birthdayController.text = '01.01.2005';
-    _emailController.text = 'user@example.com';
-    _levelController.text = '12';
-    _starsController.text = '14250';
+    loadUser();
   }
+
+
+  Future<void> loadUser() async {
+    final dbHelper = DatabaseHelper.instance;
+    final row = await dbHelper.getCurrentUser();
+    if (row == null) return;
+
+    // преобразуем дату регистрации в удобный формат (например, дд.мм.гггг)
+    final regIso = row['registration_date'] as String;
+    final regDate = DateTime.tryParse(regIso);
+
+    setState(() {
+      _userRow = row;
+      _nameController.text = row['name'] as String? ?? 'User';
+      _registerDateController.text = regDate != null
+          ? '${regDate.day.toString().padLeft(2, '0')}.'
+          '${regDate.month.toString().padLeft(2, '0')}.'
+          '${regDate.year}'
+          : '';
+      _birthdayController.text = row['birth_date'] as String? ?? '';
+      _emailController.text = row['email'] as String? ?? '';
+      _levelController.text = (row['level'] ?? 1).toString();
+      _starsController.text = (row['stars'] ?? 100).toString();
+    });
+  }
+
 
   @override
   void dispose() {
@@ -53,25 +67,29 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   Future<void> _onSave() async {
+    if (_userRow == null) {
+      Navigator.pop(context);
+      return;
+    }
+
+    final id = _userRow!['id'] as int;
     final name = _nameController.text.trim();
-    final registerDate = _registerDateController.text.trim();
-    final birthday = _birthdayController.text.trim();
+    final birthdayStr = _birthdayController.text.trim();
     final email = _emailController.text.trim();
-    final level = int.tryParse(_levelController.text.trim()) ?? 0;
-    final stars = int.tryParse(_starsController.text.trim()) ?? 0;
+    final level = int.tryParse(_levelController.text.trim()) ?? 1;
 
-    // TODO: здесь вызвать репозиторий / сервис БД:
-    // await profileRepository.updateProfile(
-    //   name: name,
-    //   registerDate: registerDate,
-    //   birthday: birthday,
-    //   email: email,
-    //   level: level,
-    //   stars: stars,
-    // );
+    final dbHelper = DatabaseHelper.instance;
+    await dbHelper.updateUser(
+      id: id,
+      name: name,
+      birthDate: birthdayStr,
+      email: email,
+      level: level,
+    );
 
-    // пока просто закрываем экран
     if (!mounted) return;
+    // mounted это булевое свойство у State (и с недавних версий также у BuildContext),
+    // которое показывает, «живёт» ли сейчас stateful‑виджет в дереве виджетов
     Navigator.pop(context);
   }
 
@@ -103,6 +121,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
 class _ProfileContent extends StatelessWidget {
   final TextEditingController nameController;
+  // TextEditingController хранит текущее значение поля и позволяет:
+  // задать стартовый текст
+  // прочитать, что пользователь ввёл (controller.text);
+  // программно менять текст (например, после загрузки из БД).
   final TextEditingController registerDateController;
   final TextEditingController birthdayController;
   final TextEditingController emailController;

@@ -24,13 +24,15 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  DateTime _currentMonth = DateTime(2025, 10, 1);
+  DateTime _currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _selectedDate = DateTime.now();
   int _currentTabIndex = 0;
+  late final List<Widget> items = [_buildTaskRow('Задание 1'), Divider(),  _buildTaskRow('Задание 2'),Divider(),
+    _buildTaskRow('Задание 3'), Divider(), _buildTaskRow('Задание 4')];
 
   bool _isEditMode = false;
 
-// Заглушка для статистики по дням (затем можно брать из БД)
+// Заглушка для статистики по дням ( потом брать из БД)
   final Map<DateTime, _DayStatus> _days = {};
 
   @override
@@ -40,21 +42,33 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _initMockDays() {
-// Пример заполнения статуса дней
-    DateTime base = DateTime(2025, 10, 1);
-    for (int i = 0; i < 31; i++) {
+    // первый день текущего месяца
+    final now = DateTime.now();
+    final base = DateTime(now.year, now.month, 1);
+    final daysInMonth = DateUtils.getDaysInMonth(base.year, base.month);
+
+    for (int i = 0; i < daysInMonth; i++) {
       final d = DateTime(base.year, base.month, i + 1);
+
+      // пример логики: будни completed, выходные warning, 15‑е failed
+      final weekday = d.weekday; // 1 = Пн ... 7 = Вс
+      DayType type;
+      if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
+        type = DayType.warning;
+      } else if (d.day == 15) {
+        type = DayType.failed;
+      } else {
+        type = DayType.completed;
+      }
+
       _days[d] = _DayStatus(
-        doneTasks: i == 28 ? 3 : 5,
+        doneTasks: type == DayType.completed ? 5 : (type == DayType.failed ? 1 : 3),
         totalTasks: 5,
-        type: (i % 3 == 0)
-            ? DayType.completed
-            : (i % 3 == 1)
-            ? DayType.failed
-            : DayType.warning,
+        type: type,
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -154,22 +168,55 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildTaskRow(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+    return MenuAnchor(
+      // пункты контекстного меню для задачи
+      menuChildren: [
+        MenuItemButton(
+          child: const Text('Изменить'),
+          onPressed: () {
+            // TODO: открыть экран изменения
+          },
+        ),
+        MenuItemButton(
+          child: const Text(
+            'Удалить',
+            style: TextStyle(color: Colors.red),
+          ),
+          onPressed: () {
+            // TODO: удалить задачу
+          },
+        ),
+      ],
+
+      // builder рисует строку задачи
+      builder: (BuildContext context, MenuController controller, Widget? child) {
+        return GestureDetector(
+          onLongPress: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open(); // ← по долгому нажатию открыть меню
+            }
+          },
+          child: child,
+        );
+      },
+
+      // виджет строки задачи
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-          // Правая часть: либо чекбокс, либо три точки
-          if (!_isEditMode)
             Checkbox(
               value: false,
               activeColor: const Color(0xFFFFC94B),
@@ -177,35 +224,14 @@ class _HomePageState extends State<HomePage> {
               onChanged: (bool? value) {
                 // TODO: отметить задачу выполненной
               },
-            )
-          else
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              onSelected: (value) {
-                switch (value) {
-                  case 'edit':
-                  // TODO: открыть экран/диалог редактирования задачи
-                    break;
-                  case 'delete':
-                  // TODO: удалить задачу
-                    break;
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Изменить'),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Удалить'),
-                ),
-              ],
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+
 
 
   Widget _buildSegmentButton(String text, bool selected, VoidCallback onTap) {
@@ -238,7 +264,7 @@ class _HomePageState extends State<HomePage> {
     final daysInMonth = DateUtils.getDaysInMonth(
         _currentMonth.year, _currentMonth.month);
     final firstWeekday =
-        DateTime(_currentMonth.year, _currentMonth.month, 1).weekday; // 1..7
+        DateTime(_currentMonth.year, _currentMonth.month, 1).weekday;
     final totalCells = daysInMonth + (firstWeekday - 1);
     final rows = (totalCells / 7).ceil();
 
@@ -382,8 +408,9 @@ class _HomePageState extends State<HomePage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,               // позволяет full-screen
-      backgroundColor: Colors.transparent,    // чтобы скругления работали
-      builder: (context) {
+      backgroundColor: Colors.transparent,    // чтобы скругления работал
+        enableDrag: true,
+        builder: (context) {
         return DraggableScrollableSheet(
           // пресеты высоты: превью, средняя, full-screen
           initialChildSize: 0.35,  // первое положение (превью)
@@ -397,7 +424,7 @@ class _HomePageState extends State<HomePage> {
                 color: Color(0xFF020B3B),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              height: 20,
+              padding: const EdgeInsets.all(4),
               child: Column(
                 children: [
                   // полоса для перетаскивания
@@ -411,64 +438,39 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // AppBar внутри bottom sheet с кнопкой «свернуть/закрыть»
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Задачи на день',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Задачи на день',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
                           ),
+                          textAlign: TextAlign.center,
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.white70),
-                          onPressed: () {
-                            setState(() {
-                              _isEditMode = !_isEditMode;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
+                      ),
+                      Divider(),
+                    ],
                   ),
 
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 16),
+                  _buildTodayProgress(),
 
                   // контент, который может прокручиваться и уходить ниже экрана
                   Expanded(
-                    child: ListView(
-                      controller: scrollController,
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      children: [
-                        _buildTodayProgress(),          //  виджет прогресса
-                        const SizedBox(height: 16),
-                        // const Text(
-                        //   'Задачи',
-                        //   style: TextStyle(
-                        //     color: Colors.white,
-                        //     fontSize: 20,
-                        //     fontWeight: FontWeight.w600,
-                        //   ),
-                        //   textAlign: TextAlign.center,
-                        // ),
-                        const Divider(),
-                        _buildTaskRow('Задание 1'),
-                        const Divider(),
-                        _buildTaskRow('Задание 2'),
-                        const Divider(),
-                        _buildTaskRow('Задание 3'),
-                        const Divider(),
-                        // дальше длинный список – он будет скроллиться
-                      ],
-                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ListView.builder(
+                        controller: scrollController,
+                        itemCount: items.length,
+                        itemBuilder: (context, index){
+                          return items[index];
+                          },
+                      ),
+                    )
+
                   ),
                 ],
               ),
@@ -480,7 +482,7 @@ class _HomePageState extends State<HomePage> {
   }
 
 
-// Блок "Сегодня: 3/5 задач выполнено - 60%"
+// блок с % выполнения задач
   Widget _buildTodayProgress() {
     final status = _days[_selectedDate];
     final done = status?.doneTasks ?? 0;
@@ -488,7 +490,7 @@ class _HomePageState extends State<HomePage> {
     final percent = total == 0 ? 0.0 : done / total;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -571,7 +573,25 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+}
 
+class LongPressListItem extends StatelessWidget {
+  final Widget item;
+  final VoidCallback onLongPress;
+
+  const LongPressListItem({
+    required this.item,
+    required this.onLongPress,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onLongPress: onLongPress,
+      child: item,
+    );
+  }
 }
 
 
