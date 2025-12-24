@@ -24,8 +24,10 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => HomePageState();
 }
+enum ViewMode { month, week, day }
 
 class HomePageState extends State<HomePage> {
+  ViewMode viewMode = ViewMode.month; //переменная для контроля просмотра дат
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime selectedDate = DateTime.now();
   int selectedDifficulty = 1;
@@ -417,12 +419,41 @@ class HomePageState extends State<HomePage> {
         padding: const EdgeInsets.all(4),
         child: Row(
           children: [
-            buildSegmentButton('Месяц', true, () {}),
-            buildSegmentButton('Неделя', false, () {}),
-            buildSegmentButton('День', false, () {
-// TODO: перейти к детальному дневному виду
-            }),
+            buildModeChip('Месяц', ViewMode.month),
+            const SizedBox(width: 8),
+            buildModeChip('Неделя', ViewMode.week),
+            const SizedBox(width: 8),
+            buildModeChip('День', ViewMode.day),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildModeChip(String label, ViewMode mode) {
+    final isActive = viewMode == mode;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          viewMode = mode;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFFFFC94B) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isActive ? const Color(0xFFFFC94B) : Colors.white54,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.black : Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -483,7 +514,7 @@ class HomePageState extends State<HomePage> {
               activeColor: const Color(0xFFFFC94B),
               checkColor: Colors.black,
               onChanged: (bool? value) {
-                // TODO: отметить задачу выполненной
+                value = true;
               },
             ),
           ],
@@ -754,7 +785,7 @@ class HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Сегодня: $done/$total задач выполнено',
+            '$done/$total задач выполнено',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 14,
