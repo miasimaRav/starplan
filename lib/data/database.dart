@@ -70,12 +70,20 @@ class DatabaseHelper {
     ''');
 
     // стартовый пользователь
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now();
     await db.insert('users', {
       'name': 'User',
       'registration_date': now,
       'stars': 100,
     });
+
+    //TODO: обдумать какие улучшения могут быть
+    // await db.insert('upgrades', {
+    //   'name': 'Улучшение',
+    //   'type': '',
+    //   'cost': 100,
+    //   'purchased': 0,
+    // });
   }
 
   Future close() async {
@@ -122,6 +130,27 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
+
+  Future<void> insertTask({
+    required String title,
+    required String? description,
+    required int difficulty,
+    required DateTime startDate,
+    required DateTime endDate,
+    required int stars,
+    required bool completed,
+})async{
+    final db = await database;
+    await db.insert('tasks', {
+      'title': title,
+      'description': description,
+      'difficulty':difficulty,
+      'start_date': startDate,
+      'end_date':endDate,
+      'stars': stars,
+      'completed':completed
+    });
+}
 
 
   // TODO: update для task, подумать как сделать sub_tasks

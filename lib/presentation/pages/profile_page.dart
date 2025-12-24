@@ -5,15 +5,15 @@ class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  State<ProfilePage> createState() => ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
-  bool _isEditProfile = true;
+class ProfilePageState extends State<ProfilePage> {
+  bool isEditProfile = true;
 
-  void _onIconPressed() {
+  void onIconPressed() {
    /* setState(() {
-      _isEditProfile = !_isEditProfile;
+      isEditProfile = !isEditProfile;
     });
 
     */
@@ -35,20 +35,20 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
         child: SafeArea(
-          child: _ProfileContent(
-            //isEditProfile: _isEditProfile,
-            onIconPressed: _onIconPressed,),
+          child: ProfileContent(
+            //isEditProfile: isEditProfile,
+            onIconPressed: onIconPressed,),
         ),
       ),
     );
   }
 }
 
-class _ProfileContent extends StatelessWidget {
+class ProfileContent extends StatelessWidget {
   //final bool isEditProfile;
   final VoidCallback onIconPressed;
 
-  const _ProfileContent({
+  const ProfileContent({
    // required this.isEditProfile,
     required this.onIconPressed,
   });
@@ -57,18 +57,18 @@ class _ProfileContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildTopBar(),
+        buildTopBar(),
         const SizedBox(height: 12),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                _buildHeaderCard(),
+                buildHeaderCard(),
                 const SizedBox(height: 16),
-                _buildStatsGrid(),
+                buildStatsGrid(),
                 const SizedBox(height: 16),
-                _buildAchievementsSection(),
+                buildAchievementsSection(),
                 const SizedBox(height: 24),
               ],
             ),
@@ -79,7 +79,7 @@ class _ProfileContent extends StatelessWidget {
   }
 
   // Верхняя панель с меню и плюсом
-  Widget _buildTopBar() {
+  Widget buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
@@ -112,7 +112,7 @@ class _ProfileContent extends StatelessWidget {
   }
 
   // Большая карточка с уровнем, именем и прогрессом XP
-  Widget _buildHeaderCard() {
+  Widget buildHeaderCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -184,9 +184,9 @@ class _ProfileContent extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        _buildLevelChip('Уровень 12'),
+                        buildLevelChip('Уровень 12'),
                         const SizedBox(width: 6),
-                        _buildLevelChip('14250 XP'),
+                        buildLevelChip('14250 XP'),
                       ],
                     ),
                   ],
@@ -251,7 +251,7 @@ class _ProfileContent extends StatelessWidget {
     );
   }
 
-  static Widget _buildLevelChip(String text) {
+  static Widget buildLevelChip(String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -270,20 +270,20 @@ class _ProfileContent extends StatelessWidget {
   }
 
   // Четыре плитки: задачи, текущая серия, рекорд, всего опыта
-  static Widget _buildStatsGrid() {
+  static Widget buildStatsGrid() {
     return Row(
       children: [
         Expanded(
           child: Column(
             children: [
-              _StatCard(
+              StatCard(
                 title: 'Задач\nвыполнено',
                 value: '143',
                 background: const Color(0xFF0C8A5F),
                 iconPath: 'assets/images/icons/check_tasks.png',
               ),
               const SizedBox(height: 8),
-              _StatCard(
+              StatCard(
                 title: 'Рекорд\nсерии',
                 value: '15',
                 background: const Color(0xFF7A23D8),
@@ -296,14 +296,14 @@ class _ProfileContent extends StatelessWidget {
         Expanded(
           child: Column(
             children: [
-              _StatCard(
+              StatCard(
                 title: 'Текущая\nсерия',
                 value: '7',
                 background: const Color(0xFFB33A25),
                 iconPath: "",
               ),
               const SizedBox(height: 8),
-              _StatCard(
+              StatCard(
                 title: 'Всего\nопыта',
                 value: '14250',
                 background: const Color(0xFF4230A6),
@@ -317,7 +317,7 @@ class _ProfileContent extends StatelessWidget {
   }
 
   // Блок с достижениями
-  static Widget _buildAchievementsSection() {
+  static Widget buildAchievementsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -349,7 +349,7 @@ class _ProfileContent extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _AchievementCard(
+              child: AchievementCard(
                 title: 'Первый шаг',
                 subtitle: 'Выполните первую\nзадачу',
                 dateText: '15 окт 2025',
@@ -358,7 +358,7 @@ class _ProfileContent extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _AchievementCard(
+              child: AchievementCard(
                 title: 'Огненная полоса',
                 subtitle: 'Достигните 7 дней\nподряд',
                 dateText: '28 окт 2025',
@@ -371,7 +371,7 @@ class _ProfileContent extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _AchievementCard(
+              child: AchievementCard(
                 title: 'Мастер задач',
                 subtitle: 'Выполните 100 задач',
                 dateText: '--',
@@ -381,7 +381,7 @@ class _ProfileContent extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _AchievementCard(
+              child: AchievementCard(
                 title: 'Легенда',
                 subtitle: 'Откройте все награды',
                 dateText: '--',
@@ -396,13 +396,13 @@ class _ProfileContent extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
+class StatCard extends StatelessWidget {
   final String title;
   final String value;
   final Color background;
   final String iconPath;
 
-  const _StatCard({
+  const StatCard({
     required this.title,
     required this.value,
     required this.background,
@@ -453,14 +453,14 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _AchievementCard extends StatelessWidget {
+class AchievementCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String dateText;
   final String iconPath;
   final bool locked;
 
-  const _AchievementCard({
+  const AchievementCard({super.key,
     required this.title,
     required this.subtitle,
     required this.dateText,

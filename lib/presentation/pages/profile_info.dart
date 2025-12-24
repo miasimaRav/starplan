@@ -35,9 +35,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final row = await dbHelper.getCurrentUser();
     if (row == null) return;
 
-    // преобразуем дату регистрации в удобный формат (например, дд.мм.гггг)
-    final regIso = row['registration_date'] as String;
-    final regDate = DateTime.tryParse(regIso);
+    // преобразуем дату регистрации в удобный формат
+    final reg = row['registration_date'] as String;
+    final regDate = DateTime.tryParse(reg);
 
     setState(() {
       _userRow = row;
@@ -123,7 +123,7 @@ class _ProfileContent extends StatelessWidget {
   final TextEditingController nameController;
   // TextEditingController хранит текущее значение поля и позволяет:
   // задать стартовый текст
-  // прочитать, что пользователь ввёл (controller.text);
+  // прочитать, что пользователь ввёл
   // программно менять текст (например, после загрузки из БД).
   final TextEditingController registerDateController;
   final TextEditingController birthdayController;
