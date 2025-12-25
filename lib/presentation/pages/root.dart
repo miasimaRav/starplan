@@ -19,8 +19,6 @@ class _RootPageState extends State<RootPage> {
     HomePage(),    // текущая HomePage без bottomNavigationBar
     ProfilePage(), // профиль
     ShopPage(),    // магазин
-    EditProfilePage()
-  //  StatsPage(),   // заглушка
   ];
 
   @override
@@ -56,10 +54,7 @@ class _RootPageState extends State<RootPage> {
             icon: Icon(Icons.shopping_cart),
             label: 'Магазин',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: 'Статистика',
-          ),
+
         ],
       ),
     );

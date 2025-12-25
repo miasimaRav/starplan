@@ -1,6 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+import 'models/task_model.dart';
+
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _db;
@@ -150,8 +152,52 @@ class DatabaseHelper {
       'stars': stars,
       'completed':completed
     });
+
+
 }
 
+  Future<List<Task>> getTasksBetweenDates({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final db = await database;
 
-  // TODO: update для task, подумать как сделать sub_tasks
+    // приводим к строкам ISO (как в toMap)
+    final startDate = start.toIso8601String();
+    final endDate = end.toIso8601String();
+
+    final result = await db.query(
+      'tasks',
+      where: 'start_date >= ? AND end_date <= ?',
+      whereArgs: [startDate, endDate],
+      orderBy: 'start_date ASC',
+    );
+
+    return result.map((row) => Task.fromMap(row)).toList();
+  }
+
+  Future<Map<String, int>> getTasksCountForDate(DateTime date) async {
+    final db = await database;
+
+    // диапазон для одного дня [00:00 - 23:59]
+    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    final startDate = startOfDay.toIso8601String();
+    final endDate = endOfDay.toIso8601String();
+    // общее количество задач
+    final totalResult = await db.rawQuery(
+      'SELECT COUNT(*) as total FROM tasks WHERE start_date <= ? AND end_date >= ?',
+      [endDate, startDate],);
+    // выполненные задачи
+    final doneResult = await db.rawQuery(
+      'SELECT COUNT(*) as done FROM tasks WHERE completed = 1 AND start_date <= ? AND end_date >= ?',
+      [endDate, startDate],
+    );
+    return {
+      'total': (totalResult.first['total'] as int) ?? 0,
+      'done': (doneResult.first['done'] as int) ?? 0,};
+  }
+
+
 }
