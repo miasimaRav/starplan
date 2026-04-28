@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:starplan/presentation/pages/profile_info.dart';
+import '../../data/database.dart'; // Подключаем DatabaseHelper
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -11,17 +12,178 @@ class ProfilePage extends StatefulWidget {
 class ProfilePageState extends State<ProfilePage> {
   bool isEditProfile = true;
 
-  void onIconPressed() {
-   /* setState(() {
-      isEditProfile = !isEditProfile;
-    });
+  // Данные пользователя из БД
+  String userName = 'User';
+  int userLevel = 1;
+  int userStars = 100;
+  int totalXP = 0; // TODO: Рассчитывать на основе задач/звёзд
+  int tasksCompleted = 0;
+  int currentStreak = 0;
+  int streakRecord = 0;
 
-    */
+  // Достижения
+  late List<Map<String, dynamic>> achievements = [
+    {
+      'title': 'Первый шаг',
+      'subtitle': 'Выполните первую задачу',
+      'condition': () => tasksCompleted >= 1,
+      'starsReward': 50,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_first_step.png',
+    },
+    {
+      'title': 'Огненная полоса',
+      'subtitle': 'Достигните 7 дней подряд',
+      'condition': () => currentStreak >= 7,
+      'starsReward': 100,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_streak7.png',
+    },
+    {
+      'title': 'Мастер задач',
+      'subtitle': 'Выполните 100 задач',
+      'condition': () => tasksCompleted >= 100,
+      'starsReward': 200,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_100tasks.png',
+    },
+    {
+      'title': 'Новичок',
+      'subtitle': 'Зарегистрируйтесь в приложении',
+      'condition': () => true, // Автоматически при регистрации
+      'starsReward': 10,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_novice.png',
+    },
+    {
+      'title': 'Стойкий',
+      'subtitle': 'Достигните 30 дней серии',
+      'condition': () => currentStreak >= 30,
+      'starsReward': 300,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_persistent.png',
+    },
+    {
+      'title': 'Эксперт',
+      'subtitle': 'Выполните 500 задач',
+      'condition': () => tasksCompleted >= 500,
+      'starsReward': 500,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_expert.png',
+    },
+    {
+      'title': 'Легенда',
+      'subtitle': 'Откройте все награды',
+      'condition': (List<Map<String, dynamic>> ach) => ach.every((a) => a['completed']),
+      'starsReward': 1000,
+      'completed': false,
+      'date': '--',
+      'iconPath': 'assets/images/icons/achievement_legend.png',
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    loadUserData();
+  }
+
+  Future<void> loadUserData() async {
+    final user = await DatabaseHelper.instance.getCurrentUser();
+    if (user != null) {
+      setState(() {
+        userName = user['name'] as String;
+        userLevel = user['level'] as int;
+        userStars = user['stars'] as int;
+      });
+    }
+
+    // TODO: Загрузить статистику (tasksCompleted, streaks) из БД
+    // Здесь можно добавить запросы для подсчёта выполненных задач, серий и т.д.
+    // Для примера используем заглушки, заменить на реальные запросы
+    tasksCompleted = 143; // Пример: await DatabaseHelper.getCompletedTasksCount();
+    currentStreak = 7; // Рассчитать на основе дат выполненных дней
+    streakRecord = 15;
+    totalXP = 14250; // На основе звёзд или задач
+
+    await checkAchievements();
+  }
+
+  Future<void> checkAchievements() async {
+    final user = await DatabaseHelper.instance.getCurrentUser();
+    if (user == null) return;
+
+    final userId = user['id'] as int;
+    int currentStars = user['stars'] as int;
+    final welcomeReceived = user['welcome_bonus_received'] as int? ?? 0;
+
+    bool updated = false;
+
+    for (var ach in achievements) {
+      if (ach['completed'] == true) continue;
+
+      bool conditionMet = false;
+
+      final condition = ach['condition'];
+
+      // Обработка разных типов условий
+      if (condition is bool Function()) {
+        // Обычное условие без параметров
+        conditionMet = condition();
+      }
+      else if (condition is bool Function(List<Map<String, dynamic>>)) {
+        // Условие для "Легенда" (проверяет все достижения)
+        conditionMet = condition(achievements);
+      }
+      else if (ach['title'] == 'Новичок') {
+        // Особая логика для Новичка
+        conditionMet = welcomeReceived == 0;
+      }
+
+      if (conditionMet) {
+        ach['completed'] = true;
+        ach['date'] = DateTime.now().toString().substring(0, 10);
+
+        final reward = ach['starsReward'] as int;
+        currentStars += reward;
+
+        // Обновляем баланс в базе
+        await DatabaseHelper.instance.updateUserStars(userId, currentStars);
+
+        // Если это "Новичок" — ставим флаг, чтобы больше не начислялось
+        if (ach['title'] == 'Новичок') {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'users',
+            {'welcome_bonus_received': 1},
+            where: 'id = ?',
+            whereArgs: [userId],
+          );
+        }
+
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      setState(() {
+        userStars = currentStars;
+      });
+    }
+  }
+
+  void onIconPressed() {
     // переход на нужную страницу
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const EditProfilePage()),
-    );
+    ).then((_) => loadUserData()); // Обновить после редактирования
   }
 
   @override
@@ -36,8 +198,8 @@ class ProfilePageState extends State<ProfilePage> {
         ),
         child: SafeArea(
           child: ProfileContent(
-            //isEditProfile: isEditProfile,
-            onIconPressed: onIconPressed,),
+            onIconPressed: onIconPressed,
+          ),
         ),
       ),
     );
@@ -45,16 +207,24 @@ class ProfilePageState extends State<ProfilePage> {
 }
 
 class ProfileContent extends StatelessWidget {
-  //final bool isEditProfile;
   final VoidCallback onIconPressed;
 
   const ProfileContent({
-   // required this.isEditProfile,
     required this.onIconPressed,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Доступ к состоянию для данных
+    final state = context.findAncestorStateOfType<ProfilePageState>()!;
+    final userName = state.userName;
+    final userLevel = state.userLevel;
+    final totalXP = state.totalXP;
+    final tasksCompleted = state.tasksCompleted;
+    final currentStreak = state.currentStreak;
+    final streakRecord = state.streakRecord;
+    final achievements = state.achievements;
+
     return Column(
       children: [
         buildTopBar(),
@@ -64,11 +234,11 @@ class ProfileContent extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                buildHeaderCard(),
+                buildHeaderCard(userName, userLevel, totalXP),
                 const SizedBox(height: 16),
-                buildStatsGrid(),
+                buildStatsGrid(tasksCompleted, currentStreak, streakRecord, totalXP),
                 const SizedBox(height: 16),
-                buildAchievementsSection(),
+                buildAchievementsSection(achievements),
                 const SizedBox(height: 24),
               ],
             ),
@@ -112,7 +282,7 @@ class ProfileContent extends StatelessWidget {
   }
 
   // Большая карточка с уровнем, именем и прогрессом XP
-  Widget buildHeaderCard() {
+  Widget buildHeaderCard(String userName, int userLevel, int totalXP) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -173,9 +343,9 @@ class ProfileContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Герой StarPlan',
-                      style: TextStyle(
+                    Text(
+                      userName,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -184,9 +354,9 @@ class ProfileContent extends StatelessWidget {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        buildLevelChip('Уровень 12'),
+                        buildLevelChip('Уровень $userLevel'),
                         const SizedBox(width: 6),
-                        buildLevelChip('14250 XP'),
+                        buildLevelChip('$totalXP XP'),
                       ],
                     ),
                   ],
@@ -195,7 +365,6 @@ class ProfileContent extends StatelessWidget {
               AnimatedSwitcher(
                 duration: Duration(microseconds: 250),
                 child: IconButton(
-                  //key: ValueKey<bool>(isEditProfile),
                   icon: Icon(Icons.edit),
                   color: Colors.white,
                   onPressed: onIconPressed,
@@ -204,9 +373,9 @@ class ProfileContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          const Text(
-            'До уровня 13',
-            style: TextStyle(
+          Text(
+            'До уровня ${userLevel + 1}',
+            style: const TextStyle(
               color: Colors.white70,
               fontSize: 12,
             ),
@@ -222,7 +391,7 @@ class ProfileContent extends StatelessWidget {
                 ),
               ),
               FractionallySizedBox(
-                widthFactor: 2450 / 3000,
+                widthFactor: 2450 / 3000, // TODO: Рассчитывать на основе реального прогресса
                 child: Container(
                   height: 10,
                   decoration: BoxDecoration(
@@ -239,7 +408,7 @@ class ProfileContent extends StatelessWidget {
           const Align(
             alignment: Alignment.centerRight,
             child: Text(
-              '2450 / 3000 XP',
+              '2450 / 3000 XP', // TODO: Из БД
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 11,
@@ -270,7 +439,7 @@ class ProfileContent extends StatelessWidget {
   }
 
   // Четыре плитки: задачи, текущая серия, рекорд, всего опыта
-  static Widget buildStatsGrid() {
+  static Widget buildStatsGrid(int tasksCompleted, int currentStreak, int streakRecord, int totalXP) {
     return Row(
       children: [
         Expanded(
@@ -278,14 +447,14 @@ class ProfileContent extends StatelessWidget {
             children: [
               StatCard(
                 title: 'Задач\nвыполнено',
-                value: '143',
+                value: '$tasksCompleted',
                 background: const Color(0xFF0C8A5F),
                 iconPath: 'assets/images/icons/check_tasks.png',
               ),
               const SizedBox(height: 8),
               StatCard(
                 title: 'Рекорд\nсерии',
-                value: '15',
+                value: '$streakRecord',
                 background: const Color(0xFF7A23D8),
                 iconPath: 'assets/images/icons/streak_record.png',
               ),
@@ -298,14 +467,14 @@ class ProfileContent extends StatelessWidget {
             children: [
               StatCard(
                 title: 'Текущая\nсерия',
-                value: '7',
+                value: '$currentStreak',
                 background: const Color(0xFFB33A25),
                 iconPath: "",
               ),
               const SizedBox(height: 8),
               StatCard(
                 title: 'Всего\nопыта',
-                value: '14250',
+                value: '$totalXP',
                 background: const Color(0xFF4230A6),
                 iconPath: '',
               ),
@@ -317,7 +486,9 @@ class ProfileContent extends StatelessWidget {
   }
 
   // Блок с достижениями
-  static Widget buildAchievementsSection() {
+  static Widget buildAchievementsSection(List<Map<String, dynamic>> achievements) {
+    final completedCount = achievements.where((a) => a['completed']).length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -338,58 +509,34 @@ class ProfileContent extends StatelessWidget {
                 color: Colors.white.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: const Text(
-                '3 / 6',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+              child: Text(
+                '$completedCount / ${achievements.length}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: AchievementCard(
-                title: 'Первый шаг',
-                subtitle: 'Выполните первую\nзадачу',
-                dateText: '15 окт 2025',
-                iconPath: 'assets/images/icons/achievement_first_step.png',
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: AchievementCard(
-                title: 'Огненная полоса',
-                subtitle: 'Достигните 7 дней\nподряд',
-                dateText: '28 окт 2025',
-                iconPath: 'assets/images/icons/achievement_streak7.png',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: AchievementCard(
-                title: 'Мастер задач',
-                subtitle: 'Выполните 100 задач',
-                dateText: '--',
-                iconPath: 'assets/images/icons/achievement_100tasks.png',
-                locked: true,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: AchievementCard(
-                title: 'Легенда',
-                subtitle: 'Откройте все награды',
-                dateText: '--',
-                iconPath: '',
-                locked: true,
-              ),
-            ),
-          ],
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.2,
+          ),
+          itemCount: achievements.length,
+          itemBuilder: (context, index) {
+            final ach = achievements[index];
+            return AchievementCard(
+              title: ach['title'],
+              subtitle: ach['subtitle'],
+              dateText: ach['date'],
+              iconPath: ach['iconPath'],
+              locked: !ach['completed'],
+            );
+          },
         ),
       ],
     );

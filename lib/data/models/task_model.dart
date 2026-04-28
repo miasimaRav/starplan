@@ -1,5 +1,5 @@
 class Task {
-  final int? id;
+  final int id;
   final String title;
   final String? description;
   final int difficulty;
@@ -9,7 +9,7 @@ class Task {
   final bool completed;
 
   Task({
-    this.id,
+    required this.id,
     required this.title,
     this.description,
     this.difficulty = 1,
@@ -20,7 +20,7 @@ class Task {
   });
 
   factory Task.fromMap(Map<String, dynamic> map) => Task(
-    id: map['id'] as int?,
+    id: map['id'] as int,
     title: map['title'] as String,
     description: map['description'] as String?,
     difficulty: map['difficulty'] as int? ?? 1,
