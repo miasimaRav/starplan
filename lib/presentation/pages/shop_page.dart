@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/app_settings.dart';
 import '../../data/database.dart';
 
 class ShopPage extends StatefulWidget {
@@ -10,37 +11,32 @@ class ShopPage extends StatefulWidget {
 
 class _ShopPageState extends State<ShopPage> {
   int currentBalance = 100;
-  int selectedCategory = 2; // 0 = Темы, 1 = Аватары, 2 = Награды
+  int selectedCategory = 2;
 
   List<Map<String, dynamic>> shopItems = [];
-
   bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadData().then((_) {
-      if (mounted) setState(() => isLoading = false);
-    });
+    _loadData();
   }
 
   Future<void> _loadData() async {
-    print("=== ЗАГРУЗКА МАГАЗИНА ===");
-
-    await DatabaseHelper.instance.initShopItems();
-
+    //await DatabaseHelper.instance.initShopItems();
     final stars = await DatabaseHelper.instance.getUserStars();
     final items = await DatabaseHelper.instance.getShopItems();
-
-    print("Текущий баланс из БД: $stars");
-    print("Количество товаров в БД: ${items.length}");
 
     if (!mounted) return;
 
     setState(() {
       currentBalance = stars;
       shopItems = items;
+      isLoading = false;
     });
+
+    print("Текущий баланс из БД: $stars");
+    print("Количество товаров в БД: ${items.length}");
 
     print("Локальный currentBalance установлен в: $currentBalance");
   }
@@ -67,6 +63,9 @@ class _ShopPageState extends State<ShopPage> {
         SnackBar(
           content: const Text('Недостаточно звёзд или уже куплено'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),     //
+          behavior: SnackBarBehavior.floating,      // выглядит современнее
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
     }
@@ -306,7 +305,10 @@ class _ShopItemCard extends StatelessWidget {
   });
 
   @override
+  @override
   Widget build(BuildContext context) {
+    final isTheme = item['type'] == 'theme';
+    final isAvatar = item['type'] == 'avatar';
     final rarityColor = _getRarityColor(item['cost'] as int);
 
     return Container(
@@ -318,19 +320,31 @@ class _ShopItemCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Иконка
+          // Иконка товара
           Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               color: Colors.black.withOpacity(0.25),
             ),
-            alignment: Alignment.center,
-            child: const Icon(Icons.star, color: Colors.amber, size: 28),
-            // TODO: заменить на реальную иконку из item['iconPath'], если добавите
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.asset(
+                item['icon_path'] ?? 'assets/images/icons/coin.png',
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.star,
+                  color: Colors.amber,
+                  size: 32,
+                ),
+              ),
+            ),
           ),
+
           const SizedBox(width: 12),
+
+          // Информация о товаре
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,10 +359,13 @@ class _ShopItemCard extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: rarityColor,
                         borderRadius: BorderRadius.circular(999),
@@ -387,32 +404,44 @@ class _ShopItemCard extends StatelessWidget {
               ],
             ),
           ),
+
           const SizedBox(width: 12),
-          // Кнопка Купить / Куплено
+
+          // Кнопка
           if (purchased)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(999),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00C853),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
               ),
-              child: const Text(
-                'Куплено',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-              ),
+              onPressed: () async {
+                final settings = await AppSettings(); // создаём экземпляр
+                await settings.loadSettings();
+
+                if (isTheme) {
+                  await settings.setTheme(item['key'] ?? item['name']);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Тема применена'), backgroundColor: Colors.green),
+                  );
+                } else if (isAvatar) {
+                  await settings.setAvatar(item['key'] ?? item['name']);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Аватар установлен'), backgroundColor: Colors.green),
+                  );
+                }
+              },
+              child: const Text('Применить', style: TextStyle(fontSize: 12)),
             )
           else
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFA22C),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
               ),
               onPressed: onBuy,
-              child: const Text(
-                'Купить',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-              ),
+              child: const Text('Купить', style: TextStyle(fontSize: 12)),
             ),
         ],
       ),

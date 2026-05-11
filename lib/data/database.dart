@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 import '../presentation/pages/home_page.dart';
+import 'models/day_status.dart';
 import 'models/task_model.dart';
 
 class DatabaseHelper {
@@ -26,7 +27,7 @@ class DatabaseHelper {
 
       return await openDatabase(
         path,
-        version: 2,                    // увеличиваем версию при изменении структуры
+        version: 6,                    // увеличиваем версию при изменении структуры
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -46,8 +47,8 @@ class DatabaseHelper {
         birth_date TEXT,
         email TEXT,
         level INTEGER DEFAULT 1,
-        stars INTEGER DEFAULT 100,
-        welcome_bonus_received INTEGER DEFAULT 0
+        stars INTEGER DEFAULT 110,
+        welcome_bonus_received INTEGER DEFAULT 1
       )
     ''');
 
@@ -59,8 +60,8 @@ class DatabaseHelper {
         difficulty INTEGER,
         start_date TEXT,
         end_date TEXT,
-        stars INTEGER DEFAULT 0,
-        completed INTEGER DEFAULT 0
+        stars INTEGER NOT NULL,
+        completed INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -80,10 +81,32 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         type TEXT,
         cost INTEGER NOT NULL,
-        purchased INTEGER DEFAULT 0
+        purchased INTEGER DEFAULT 0,
+        icon_path TEXT,
+        key TEXT
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE user_achievements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        achievement_key TEXT NOT NULL,
+        completed INTEGER DEFAULT 0,
+        date_completed TEXT,
+        stars_rewarded INTEGER DEFAULT 0,
+        UNIQUE(user_id, achievement_key)
+      )
+    ''');
+    await db.execute('''
+    CREATE TABLE task_progress (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      date TEXT NOT NULL,                    -- yyyy-mm-dd
+      completed INTEGER DEFAULT 0,
+      UNIQUE(task_id, date)
+    )
+  ''');
 
 
 
@@ -97,10 +120,14 @@ class DatabaseHelper {
       'welcome_bonus_received': 1
     });
 
+
     await _initDefaultUpgrades(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 6) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN completed INTEGER DEFAULT 0');
+    }
     print("Обновление базы с версии $oldVersion на $newVersion");
     // можно добавлять новые столбцы при обновлении версии
   }
@@ -112,8 +139,19 @@ class DatabaseHelper {
     }
   }
 
-  // Инициализация начальных предметов магазина
+// Инициализация начальных предметов магазина
   Future<void> _initDefaultUpgrades(Database db) async {
+    // Проверяем, есть ли уже записи в таблице upgrades
+    final countResult = await db.rawQuery('SELECT COUNT(*) as cnt FROM upgrades');
+    final count = Sqflite.firstIntValue(countResult) ?? 0;
+
+    if (count > 0) {
+      print("Магазин уже инициализирован ($count товаров)");
+      return;
+    }
+
+    print("Инициализация магазина — добавляем товары...");
+
     final batch = db.batch();
 
     // Темы
@@ -122,6 +160,8 @@ class DatabaseHelper {
       'type': 'theme',
       'cost': 350,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/theme_dark.png',
+      'key': 'dark',
     });
 
     batch.insert('upgrades', {
@@ -129,6 +169,8 @@ class DatabaseHelper {
       'type': 'theme',
       'cost': 750,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/theme_space.png',
+      'key': 'space',
     });
 
     // Аватары
@@ -137,6 +179,8 @@ class DatabaseHelper {
       'type': 'avatar',
       'cost': 500,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/avatar_warrior.png',
+
     });
 
     batch.insert('upgrades', {
@@ -144,6 +188,7 @@ class DatabaseHelper {
       'type': 'avatar',
       'cost': 650,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/avatar_mage.png',
     });
 
     // Награды / трофеи
@@ -152,6 +197,7 @@ class DatabaseHelper {
       'type': 'trophy',
       'cost': 200,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/trophy_bronze.png',
     });
 
     batch.insert('upgrades', {
@@ -159,6 +205,7 @@ class DatabaseHelper {
       'type': 'trophy',
       'cost': 550,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/trophy_silver.png',
     });
 
     batch.insert('upgrades', {
@@ -166,10 +213,11 @@ class DatabaseHelper {
       'type': 'trophy',
       'cost': 1100,
       'purchased': 0,
+      'icon_path': 'assets/images/icons/trophy_gold.png',
     });
 
     await batch.commit(noResult: true);
-    print('Начальные улучшения магазина успешно добавлены');
+    print('Начальные улучшения магазина успешно добавлены (7 товаров)');
   }
 
   Future<Map<String, dynamic>?> getCurrentUser() async {
@@ -209,6 +257,7 @@ class DatabaseHelper {
 // Удобные обёртки (оставляем для читаемости кода)
   Future<void> updateUserStars(int userId, int stars) async {
     await updateUserData(id: userId, stars: stars);
+    print("STARS UPDATE: user=$userId value=$stars");
   }
 
   Future<void> updateUser({
@@ -236,27 +285,31 @@ class DatabaseHelper {
     required int stars,
     required bool completed,
   }) async {
-    try {
       final db = await database;
       print("База открыта успешно, вставляем задачу");
 
-      await db.insert('tasks', {
+      final taskId = await db.insert('tasks', {
         'title': title,
         'description': description,
         'difficulty': difficulty,
         'start_date': startDate.toIso8601String(),
         'end_date': endDate.toIso8601String(),
         'stars': stars,
-        'completed': completed ? 1 : 0,
+        'completed': 0,
       });
 
-      print("Задача успешно добавлена");
-    } catch (e, stack) {
-      print("ОШИБКА при вставке задачи: $e");
-      print("Стек: $stack");
-      rethrow; // или обработать как хочешь
+      DateTime current = startDate;
+
+      while (!current.isAfter(endDate)) {
+        await db.insert('task_progress', {
+          'task_id': taskId,
+          'date': current.toIso8601String().substring(0, 10),
+          'completed': 0,
+        });
+
+        current = current.add(const Duration(days: 1));
+      }
     }
-  }
 
   Future<List<Task>> getTasksBetweenDates({
     required DateTime start,
@@ -264,94 +317,162 @@ class DatabaseHelper {
   }) async {
     final db = await database;
 
-    // приводим к строкам ISO (как в toMap)
-    final startDate = start.toIso8601String();
-    final endDate = end.toIso8601String();
-
     final result = await db.query(
       'tasks',
-      where: 'start_date >= ? AND end_date <= ?',
-      whereArgs: [startDate, endDate],
+      where: 'start_date <= ? AND end_date >= ?',
+      whereArgs: [
+        end.toIso8601String(),   // задача должна начинаться до конца периода
+        start.toIso8601String(), // задача должна заканчиваться после начала периода
+      ],
       orderBy: 'start_date ASC',
     );
 
     return result.map((row) => Task.fromMap(row)).toList();
   }
+  /// Проверяет, считается ли задача выполненной именно в этот день
+  Future<bool> isTaskCompletedOnDate(int taskId, DateTime date) async {
+    final db = await database;
+
+    final result = await db.rawQuery('''
+    SELECT COUNT(*) as count 
+    FROM task_completions 
+    WHERE task_id = ? 
+      AND completion_date = ?
+  ''', [
+      taskId,
+      date.toIso8601String().substring(0, 10), // yyyy-MM-dd
+    ]);
+
+    return (Sqflite.firstIntValue(result) ?? 0) > 0;
+  }
+
+  // Обновить выполнение задачи за конкретный день
+  Future<void> updateTaskProgress(int taskId, DateTime date, bool completed) async {
+    final db = await database;
+    final dateStr = date.toIso8601String().substring(0, 10); // yyyy-mm-dd
+
+    if (completed) {
+      await db.insert(
+        'task_progress',
+        {
+          'task_id': taskId,
+          'date': dateStr,
+          'completed': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      await db.delete(
+        'task_progress',
+        where: 'task_id = ? AND date = ?',
+        whereArgs: [taskId, dateStr],
+      );
+    }
+  }
+
+// Получить прогресс задачи (сколько дней выполнено)
+  Future<int> getTaskProgress(int taskId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM task_progress WHERE task_id = ? AND completed = 1',
+      [taskId],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  /// Начисление/списание звёзд при отметке выполнения задачи в конкретный день
+  /// Обновляет статус выполнения задачи за конкретный день и начисляет/списывает звёзды
+  Future<void> updateTaskCompleted({
+    required int taskId,
+    required DateTime date,
+    required bool completed,
+  }) async {
+    final db = await database;
+    final dateStr = date.toIso8601String().substring(0, 10); // yyyy-mm-dd
+
+    if (completed) {
+      // Добавляем/обновляем запись о выполнении в этот день
+      await db.insert(
+        'task_progress',
+        {
+          'task_id': taskId,
+          'date': dateStr,
+          'completed': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      // Удаляем запись о выполнении
+      await db.delete(
+        'task_progress',
+        where: 'task_id = ? AND date = ?',
+        whereArgs: [taskId, dateStr],
+      );
+    }
+
+    print("Задача $taskId на $dateStr отмечена как ${completed ? 'выполненная' : 'невыполненная'}");
+  }
 
   Future<Map<String, int>> getTasksCountForDate(DateTime date) async {
     final db = await database;
+    final dateStr = date.toIso8601String().substring(0, 10);
 
-    // диапазон для одного дня [00:00 - 23:59]
-    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0);
-    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+    final result = await db.rawQuery('''
+    SELECT
+      COUNT(*) as total,
+      SUM(completed) as done
+    FROM task_progress
+    WHERE date = ?
+  ''', [dateStr]);
 
-    final startDate = startOfDay.toIso8601String();
-    final endDate = endOfDay.toIso8601String();
-    // общее количество задач
-    final totalResult = await db.rawQuery(
-      'SELECT COUNT(*) as total FROM tasks WHERE start_date <= ? AND end_date >= ?',
-      [endDate, startDate],);
-    // выполненные задачи
-    final doneResult = await db.rawQuery(
-      'SELECT COUNT(*) as done FROM tasks WHERE completed = 1 AND start_date <= ? AND end_date >= ?',
-      [endDate, startDate],
-    );
+    final row = result.first;
+
     return {
-      'total': (totalResult.first['total'] as int) ?? 0,
-      'done': (doneResult.first['done'] as int) ?? 0,};
+      'total': row['total'] as int? ?? 0,
+      'done': row['done'] as int? ?? 0,
+    };
   }
 
   Future<Map<DateTime, DayStatus>> getMonthStats(DateTime month) async {
     final db = await database;
 
     final start = DateTime(month.year, month.month, 1);
-    final end = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
+    final end = DateTime(month.year, month.month + 1, 0);
 
-    final result = await db.rawQuery(
-      '''
-    SELECT 
-      date(start_date) as day,
+    final result = await db.rawQuery('''
+    SELECT
+      date,
       COUNT(*) as total,
       SUM(completed) as done
-    FROM tasks
-    WHERE start_date BETWEEN ? AND ?
-    GROUP BY day
-    ''',
-      [start.toIso8601String(), end.toIso8601String()],
-    );
+    FROM task_progress
+    WHERE date BETWEEN ? AND ?
+    GROUP BY date
+  ''', [
+      start.toIso8601String().substring(0, 10),
+      end.toIso8601String().substring(0, 10),
+    ]);
 
-    final Map<DateTime, DayStatus> map = {};
+    final Map<DateTime, DayStatus> stats = {};
 
     for (final row in result) {
-      final date = DateTime.parse(row['day'] as String);
+      final date = DateTime.parse(row['date'] as String);
       final total = row['total'] as int;
       final done = row['done'] as int? ?? 0;
 
-      final type = done == 0
-          ? DayType.failed
-          : done == total
-          ? DayType.completed
-          : DayType.warning;
-
-      map[date] = DayStatus(
+      stats[date] = DayStatus(
         doneTasks: done,
         totalTasks: total,
-        type: type,
+        type: done == 0
+            ? DayType.failed
+            : done == total
+            ? DayType.completed
+            : DayType.warning,
       );
     }
 
-    return map;
+    return stats;
   }
 
-  Future<void> updateTaskCompleted(int taskId, bool completed) async {
-    final db = await database;
-    await db.update(
-      'tasks',
-      {'completed': completed ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [taskId],
-    );
-  }
 
   /// Возвращает статистику по дням за месяц
   /// key   — DateTime(yyyy-mm-dd)
@@ -362,28 +483,25 @@ class DatabaseHelper {
   }) async {
     final db = await database;
 
-    final result = await db.rawQuery(
-      '''
-    SELECT
-      DATE(start_date) AS day,
-      SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS done,
-      COUNT(*) AS total
+    final result = await db.rawQuery('''
+    SELECT 
+      date(start_date) as day,
+      COUNT(*) as total,
+      SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as done
     FROM tasks
-    WHERE start_date BETWEEN ? AND ?
-    GROUP BY DATE(start_date)
-    ''',
-      [
-        start.toIso8601String(),
-        end.toIso8601String(),
-      ],
-    );
+    WHERE (start_date <= ? AND end_date >= ?)
+    GROUP BY date(start_date)
+  ''', [
+      end.toIso8601String(),
+      start.toIso8601String(),
+    ]);
 
     final Map<DateTime, Map<String, int>> stats = {};
 
     for (final row in result) {
       final dayString = row['day'] as String;
 
-      // SQLite DATE() → yyyy-MM-dd
+      // SQLite DATE() - yyyy-MM-dd
       final dateParts = dayString.split('-');
       final date = DateTime(
         int.parse(dateParts[0]),
@@ -401,18 +519,34 @@ class DatabaseHelper {
   }
 
   Future<int> deleteTask(int id) async {
-    final db = await instance.database;
+    final db = await database;
+
+    await db.delete(
+      'task_progress',// имя таблицы
+      where: 'task_id = ?',// условие
+      whereArgs: [id],// аргументы для подстановки
+    );
+
     return await db.delete(
-      'tasks',              // имя таблицы
-      where: 'id = ?',      // условие
-      whereArgs: [id],      // аргументы для подстановки
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 
+
 // Получить текущий баланс звёзд пользователя
   Future<int> getUserStars() async {
-    final user = await getCurrentUser();
-    return user?['stars'] as int? ?? 100;
+    final db = await database;
+
+    final result = await db.query(
+      'users',
+      columns: ['stars'],
+      limit: 1,
+      orderBy: 'id DESC',
+    );
+
+    return result.isNotEmpty ? (result.first['stars'] as int) : 100;
   }
 
 // Списать звёзды (уменьшить баланс)
@@ -484,74 +618,111 @@ class DatabaseHelper {
     final db = await database;
     return await db.query('upgrades', orderBy: 'cost ASC');
   }
-
-// Добавить начальные предметы в магазин (вызвать один раз, например в initState приложения или при первом запуске)
-  Future<void> initShopItems() async {
+  //Общее количество выполненных задач (все время)
+  Future<int> getCompletedTasksCount() async {
     final db = await database;
 
-    // Проверяем, есть ли уже записи
-    final countResult = await db.rawQuery('SELECT COUNT(*) as cnt FROM upgrades');
-    final count = Sqflite.firstIntValue(countResult) ?? 0;
+    final result = await db.rawQuery('''
+    SELECT COUNT(*) as count
+    FROM task_progress
+    WHERE completed = 1
+  ''');
 
-    if (count > 0) {
-      print("Магазин уже инициализирован ($count товаров)");
-      return;
-    }
-
-    print("Инициализация магазина — добавляем товары");
-
-    final batch = db.batch();
-
-    // Темы
-    batch.insert('upgrades', {
-      'name': 'Тёмная тема',
-      'type': 'theme',
-      'cost': 300,
-      'purchased': 0,
-    });
-    batch.insert('upgrades', {
-      'name': 'Космическая тема',
-      'type': 'theme',
-      'cost': 800,
-      'purchased': 0,
-    });
-
-    // Аватары
-    batch.insert('upgrades', {
-      'name': 'Аватар "Воин"',
-      'type': 'avatar',
-      'cost': 450,
-      'purchased': 0,
-    });
-    batch.insert('upgrades', {
-      'name': 'Аватар "Маг"',
-      'type': 'avatar',
-      'cost': 700,
-      'purchased': 0,
-    });
-
-    // Награды / трофеи
-    batch.insert('upgrades', {
-      'name': 'Бронзовый трофей',
-      'type': 'trophy',
-      'cost': 250,
-      'purchased': 0,
-    });
-    batch.insert('upgrades', {
-      'name': 'Серебряный трофей',
-      'type': 'trophy',
-      'cost': 600,
-      'purchased': 0,
-    });
-    batch.insert('upgrades', {
-      'name': 'Золотой трофей',
-      'type': 'trophy',
-      'cost': 1200,
-      'purchased': 0,
-    });
-
-    await batch.commit(noResult: true);
-    print("Добавлено ${await db.rawQuery('SELECT COUNT(*) FROM upgrades')} товаров");
+    return Sqflite.firstIntValue(result) ?? 0;
   }
+  // 2. Текущая серия (сколько последних дней подряд были выполненные задачи)
+  Future<int> getCurrentStreak() async {
+    final db = await database;
+
+    final result = await db.rawQuery('''
+    WITH dates AS (
+      SELECT DISTINCT date
+      FROM task_progress
+      WHERE completed = 1
+    )
+    SELECT COUNT(*) as streak 
+    FROM (
+      SELECT date,
+             JULIANDAY(date) - ROW_NUMBER() OVER (ORDER BY date) as grp
+      FROM dates
+    ) 
+    GROUP BY grp 
+    ORDER BY MAX(date) DESC 
+    LIMIT 1
+  ''');
+
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  //  Рекордная серия (максимальная серия за всё время)
+  Future<int> getStreakRecord() async {
+    final db = await database;
+
+    final result = await db.rawQuery('''
+    WITH dates AS (
+      SELECT DISTINCT date(start_date) as task_date 
+      FROM tasks 
+      WHERE completed = 1
+    )
+    SELECT MAX(streak) as record 
+    FROM (
+      SELECT COUNT(*) as streak
+      FROM (
+        SELECT task_date,
+               JULIANDAY(task_date) - ROW_NUMBER() OVER (ORDER BY task_date) as grp
+        FROM dates
+      ) 
+      GROUP BY grp
+    )
+  ''');
+
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+  // Получить все достижения пользователя
+  Future<List<Map<String, dynamic>>> getUserAchievements(int userId) async {
+    final db = await database;
+    return await db.query(
+      'user_achievements',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+// Отметить достижение как выполненное
+  Future<void> unlockAchievement({
+    required int userId,
+    required String achievementKey,
+    required int starsReward,
+  }) async {
+    final db = await database;
+
+    await db.insert(
+      'user_achievements',
+      {
+        'user_id': userId,
+        'achievement_key': achievementKey,
+        'completed': 1,
+        'date_completed': DateTime.now().toIso8601String(),
+        'stars_rewarded': starsReward,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore, // если уже есть, то не дублировать
+    );
+
+    // Начисляем звёзды
+    await updateUserStars(userId, starsReward);
+  }
+
+  // Проверить, выполнено ли достижение
+  Future<bool> isAchievementUnlocked(int userId, String achievementKey) async {
+    final db = await database;
+    final result = await db.query(
+      'user_achievements',
+      where: 'user_id = ? AND achievement_key = ? AND completed = 1',
+      whereArgs: [userId, achievementKey],
+    );
+    return result.isNotEmpty;
+  }
+
+
 
 }

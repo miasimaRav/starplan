@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../../data/database.dart';
 
 class EditProfilePage extends StatefulWidget {
-
-
   const EditProfilePage({super.key});
 
   @override
@@ -12,10 +10,8 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-
   Map<String, dynamic>? _userRow;
 
-  // контроллеры для полей
   final _nameController = TextEditingController();
   final _registerDateController = TextEditingController();
   final _birthdayController = TextEditingController();
@@ -29,13 +25,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
     loadUser();
   }
 
-
   Future<void> loadUser() async {
-    final dbHelper = DatabaseHelper.instance;
-    final row = await dbHelper.getCurrentUser();
+    final row = await DatabaseHelper.instance.getCurrentUser();
     if (row == null) return;
 
-    // преобразуем дату регистрации в удобный формат
     final reg = row['registration_date'] as String;
     final regDate = DateTime.tryParse(reg);
 
@@ -43,27 +36,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _userRow = row;
       _nameController.text = row['name'] as String? ?? 'User';
       _registerDateController.text = regDate != null
-          ? '${regDate.day.toString().padLeft(2, '0')}.'
-          '${regDate.month.toString().padLeft(2, '0')}.'
-          '${regDate.year}'
+          ? '${regDate.day.toString().padLeft(2, '0')}.${regDate.month.toString().padLeft(2, '0')}.${regDate.year}'
           : '';
       _birthdayController.text = row['birth_date'] as String? ?? '';
       _emailController.text = row['email'] as String? ?? '';
       _levelController.text = (row['level'] ?? 1).toString();
       _starsController.text = (row['stars'] ?? 100).toString();
     });
-  }
-
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _registerDateController.dispose();
-    _birthdayController.dispose();
-    _emailController.dispose();
-    _levelController.dispose();
-    _starsController.dispose();
-    super.dispose();
   }
 
   Future<void> _onSave() async {
@@ -78,21 +57,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final email = _emailController.text.trim();
     final level = int.tryParse(_levelController.text.trim()) ?? 1;
 
-    final dbHelper = DatabaseHelper.instance;
-    await dbHelper.updateUser(
+    await DatabaseHelper.instance.updateUser(
       id: id,
       name: name,
-      birthDate: birthdayStr,
-      email: email,
+      birthDate: birthdayStr.isEmpty ? null : birthdayStr,
+      email: email.isEmpty ? null : email,
       level: level,
     );
 
     if (!mounted) return;
-    // mounted это булевое свойство у State (и с недавних версий также у BuildContext),
-    // которое показывает, «живёт» ли сейчас stateful‑виджет в дереве виджетов
-    Navigator.pop(context);
+    Navigator.pop(context); // Возвращаемся без вызова loadUserData
   }
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _registerDateController.dispose();
+    _birthdayController.dispose();
+    _emailController.dispose();
+    _levelController.dispose();
+    _starsController.dispose();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(

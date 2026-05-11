@@ -20,6 +20,7 @@ class ProfilePageState extends State<ProfilePage> {
   int tasksCompleted = 0;
   int currentStreak = 0;
   int streakRecord = 0;
+  bool _achievementsChecked = false;
 
   // Достижения
   late List<Map<String, dynamic>> achievements = [
@@ -31,6 +32,7 @@ class ProfilePageState extends State<ProfilePage> {
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_first_step.png',
+      'key': 'first_step'
     },
     {
       'title': 'Огненная полоса',
@@ -40,6 +42,7 @@ class ProfilePageState extends State<ProfilePage> {
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_streak7.png',
+      'key': 'fire_way'
     },
     {
       'title': 'Мастер задач',
@@ -49,15 +52,17 @@ class ProfilePageState extends State<ProfilePage> {
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_100tasks.png',
+      'key': 'task_master'
     },
     {
       'title': 'Новичок',
       'subtitle': 'Зарегистрируйтесь в приложении',
-      'condition': () => true, // Автоматически при регистрации
+      'condition': () => false,
       'starsReward': 10,
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_novice.png',
+      'key': 'beginner'
     },
     {
       'title': 'Стойкий',
@@ -67,6 +72,7 @@ class ProfilePageState extends State<ProfilePage> {
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_persistent.png',
+      'key': 'strong'
     },
     {
       'title': 'Эксперт',
@@ -76,6 +82,7 @@ class ProfilePageState extends State<ProfilePage> {
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_expert.png',
+      'key': 'expert'
     },
     {
       'title': 'Легенда',
@@ -85,6 +92,7 @@ class ProfilePageState extends State<ProfilePage> {
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_legend.png',
+      'key': 'legend'
     },
   ];
 
@@ -96,84 +104,92 @@ class ProfilePageState extends State<ProfilePage> {
 
   Future<void> loadUserData() async {
     final user = await DatabaseHelper.instance.getCurrentUser();
-    if (user != null) {
-      setState(() {
-        userName = user['name'] as String;
-        userLevel = user['level'] as int;
-        userStars = user['stars'] as int;
-      });
-    }
-
-    // TODO: Загрузить статистику (tasksCompleted, streaks) из БД
-    // Здесь можно добавить запросы для подсчёта выполненных задач, серий и т.д.
-    // Для примера используем заглушки, заменить на реальные запросы
-    tasksCompleted = 143; // Пример: await DatabaseHelper.getCompletedTasksCount();
-    currentStreak = 7; // Рассчитать на основе дат выполненных дней
-    streakRecord = 15;
-    totalXP = 14250; // На основе звёзд или задач
-
-    await checkAchievements();
-  }
-
-  Future<void> checkAchievements() async {
-    final user = await DatabaseHelper.instance.getCurrentUser();
     if (user == null) return;
 
     final userId = user['id'] as int;
-    int currentStars = user['stars'] as int;
-    final welcomeReceived = user['welcome_bonus_received'] as int? ?? 0;
 
-    bool updated = false;
+    // 1. Загружаем статистику
+    final completed = await DatabaseHelper.instance.getCompletedTasksCount();
+    final streak = await DatabaseHelper.instance.getCurrentStreak();
+    final record = await DatabaseHelper.instance.getStreakRecord();
+
+    // 2. Загружаем актуальный баланс из БД
+    final currentStarsFromDb = user['stars'] as int;
+
+    setState(() {
+      userName = user['name'] as String;
+      userLevel = user['level'] as int;
+      userStars = currentStarsFromDb;        // актуальное значение
+      tasksCompleted = completed;
+      currentStreak = streak;
+      streakRecord = record;
+      totalXP = currentStarsFromDb * 10;
+    });
+
+    // 3. Проверяем достижения ТОЛЬКО один раз
+    if (!_achievementsChecked) {
+      await checkAchievements(userId);
+      _achievementsChecked = true;
+    }
+  }
+
+  Future<void> checkAchievements(int userId) async {
+    print("=== Проверка достижений ===");
+
+    int currentStars = userStars;
+    bool changed = false;
 
     for (var ach in achievements) {
-      if (ach['completed'] == true) continue;
+      final key = ach['key'] as String;
+
+      final alreadyUnlocked = await DatabaseHelper.instance.isAchievementUnlocked(userId, key);
+      if (alreadyUnlocked) {
+        ach['completed'] = true;
+        continue;
+      }
 
       bool conditionMet = false;
-
-      final condition = ach['condition'];
-
-      // Обработка разных типов условий
-      if (condition is bool Function()) {
-        // Обычное условие без параметров
-        conditionMet = condition();
-      }
-      else if (condition is bool Function(List<Map<String, dynamic>>)) {
-        // Условие для "Легенда" (проверяет все достижения)
-        conditionMet = condition(achievements);
-      }
-      else if (ach['title'] == 'Новичок') {
-        // Особая логика для Новичка
-        conditionMet = welcomeReceived == 0;
+      try {
+        final condition = ach['condition'];
+        if (condition is bool Function()) {
+          conditionMet = condition();
+        } else if (condition is bool Function(List<Map<String, dynamic>>)) {
+          conditionMet = condition(achievements);
+        }
+      } catch (e) {
+        print("Ошибка при проверке достижения $key: $e");
+        continue;
       }
 
       if (conditionMet) {
+        print("Выполнено достижение: ${ach['title']} (+${ach['starsReward']} ★)");
+
+        final reward = ach['starsReward'] as int;
+
+        await DatabaseHelper.instance.unlockAchievement(
+          userId: userId,
+          achievementKey: key,
+          starsReward: reward,
+        );
+
+        currentStars += reward;
         ach['completed'] = true;
         ach['date'] = DateTime.now().toString().substring(0, 10);
 
-        final reward = ach['starsReward'] as int;
-        currentStars += reward;
+        changed = true;
 
-        // Обновляем баланс в базе
-        await DatabaseHelper.instance.updateUserStars(userId, currentStars);
-
-        // Если это "Новичок" — ставим флаг, чтобы больше не начислялось
-        if (ach['title'] == 'Новичок') {
-          final db = await DatabaseHelper.instance.database;
-          await db.update(
-            'users',
-            {'welcome_bonus_received': 1},
-            where: 'id = ?',
-            whereArgs: [userId],
-          );
-        }
-
-        updated = true;
       }
+      if (changed) {
+        setState(() {
+          userStars = currentStars;
+          totalXP = currentStars * 10;
+        });}
     }
 
-    if (updated) {
+    if (changed) {
       setState(() {
         userStars = currentStars;
+        totalXP = currentStars * 10;
       });
     }
   }
