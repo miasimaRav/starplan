@@ -62,9 +62,11 @@ class HomePageState extends State<HomePage> {
     final stats = await controller.loadDayStats(date);
     if (!mounted) return;
 
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
     setState(() {
       if (stats['total'] == 0) {
-        days.remove(date);
+        days.remove(normalizedDate);
       } else {
         final done = stats['done'] ?? 0;
         final total = stats['total'] ?? 0;
@@ -73,7 +75,7 @@ class HomePageState extends State<HomePage> {
         if (done == total && total > 0) type = DayType.completed;
         else if (done == 0) type = DayType.failed;
 
-        days[DateTime(date.year, date.month, date.day)] = DayStatus(
+        days[normalizedDate] = DayStatus(
           doneTasks: done,
           totalTasks: total,
           type: type,
@@ -83,30 +85,17 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<void> loadMonthStats(DateTime month) async {
-    final stats = await controller.loadMonthStats(month); // возвращает Map<DateTime, DayStatus>
+    final statsMap = await controller.loadMonthStats(month);
 
-    int completed = 0;
-    int active = 0;
     final Map<DateTime, DayStatus> newDays = {};
 
-    stats.forEach((date, status) {   // status уже DayStatus
-      final done = status.doneTasks;
-      final total = status.totalTasks;
-
-      if (total > 0) {
-        active++;
-
-        if (done == total) completed++;
-
-        newDays[date] = status;
-      }
+    statsMap.forEach((date, status) {
+      newDays[date] = status;
     });
 
     if (!mounted) return;
 
     setState(() {
-      completedDaysInMonth = completed;
-      activeDaysInMonth = active;
       days
         ..clear()
         ..addAll(newDays);
@@ -114,12 +103,20 @@ class HomePageState extends State<HomePage> {
   }
 
   // Обновление всех данных текущего представления
+// Обновление всех данных текущего представления без конфликтов очистки данных
   Future<void> _refreshCurrentView() async {
+    if (!mounted) return;
+
+    // Сначала загружаем общую карту месяца (она безопасно очистит старое состояние через clear())
+    await loadMonthStats(currentMonth);
+
+    // Только ПОСЛЕ этого точечно обновляем задачи и показатели выбранного дня
     await Future.wait([
-      loadTasks(selectedDate),
-      loadDayStats(selectedDate),
-      loadMonthStats(currentMonth),
+      loadTasks(selectedDate),        // обновляем список задач + их completed
+      loadDayStats(selectedDate),     // накладываем точную статистику поверх карты месяца
     ]);
+
+    setState(() {}); // Принудительно перерисовываем интерфейс и календарь
   }
 
   @override
@@ -842,13 +839,12 @@ class HomePageState extends State<HomePage> {
                     },
                     onChanged: (value) async {
                       if (value == null) return;
-
                       await controller.updateTaskProgress(
                         taskId: _dayTasks[index].id!,
-                        date: selectedDate,      // передаём дату, на которой отметили
+                        date: selectedDate, //дата задачи которую отметили
                         completed: value,
+                        stars: _dayTasks[index].stars,
                       );
-
                       await _refreshCurrentView();
                     },
                   );
@@ -1009,6 +1005,7 @@ class HomePageState extends State<HomePage> {
                         taskId: _dayTasks[index].id!,
                         date: selectedDate,      // передаём дату, на которой отметили
                         completed: value,
+                        stars: _dayTasks[index].stars,
                       );
 
                       await _refreshCurrentView();
@@ -1245,6 +1242,7 @@ class HomePageState extends State<HomePage> {
                                   taskId: _dayTasks[index].id!,
                                   date: selectedDate,      // передаём дату, на которой отметили
                                   completed: value,
+                                  stars: _dayTasks[index].stars,
                                 );
 
                                 await _refreshCurrentView();
@@ -1367,4 +1365,3 @@ class HomePageState extends State<HomePage> {
   }
 
 }
-

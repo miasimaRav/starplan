@@ -7,9 +7,12 @@ class HomeController {
 
   // Получить задачи на дату (учитывая многодневные)
   Future<List<Task>> loadTasks(DateTime date) async {
+    final dayStart = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
     return await db.getTasksBetweenDates(
-      start: DateTime(date.year, date.month, date.day, 0, 0, 0),
-      end: DateTime(date.year, date.month, date.day, 23, 59, 59),
+      start: dayStart,
+      end: dayEnd,
     );
   }
 
@@ -17,37 +20,10 @@ class HomeController {
     return await db.getTasksCountForDate(date);
   }
 
+// Получить корректную статистику месяца из таблицы прогресса
   Future<Map<DateTime, DayStatus>> loadMonthStats(DateTime month) async {
-    final start = DateTime(month.year, month.month, 1);
-    final end = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
-
-    final statsMap = await db.getMonthDayStats(start: start, end: end);
-
-    final Map<DateTime, DayStatus> result = {};
-
-    statsMap.forEach((date, value) {
-      final done = value['done'] ?? 0;
-      final total = value['total'] ?? 0;
-
-      if (total == 0) return;
-
-      DayType type;
-      if (done == total) {
-        type = DayType.completed;
-      } else if (done == 0) {
-        type = DayType.failed;
-      } else {
-        type = DayType.warning;
-      }
-
-      result[date] = DayStatus(
-        doneTasks: done,
-        totalTasks: total,
-        type: type,
-      );
-    });
-
-    return result;
+    // Вызываем уже существующий правильный метод вашего DatabaseHelper
+    return await db.getMonthStats(month);
   }
 
   Future<void> createTask({
@@ -73,16 +49,36 @@ class HomeController {
     await db.deleteTask(id);
   }
 
-  /// Обновление выполнения задачи с учётом даты (для многодневных задач)
+  /// Обновление выполнения задачи с учётом даты и начисления звёзд
   Future<void> updateTaskProgress({
     required int taskId,
     required DateTime date,
     required bool completed,
+    required int stars,
   }) async {
+    // Обновляем статус выполнения в таблице прогресса
     await db.updateTaskCompleted(
       taskId: taskId,
       date: date,
       completed: completed,
     );
+
+    const int userId = 1;
+
+    // Получаем текущий баланс пользователя из базы данных!
+    final int currentBalance = await db.getUserStars();
+
+    if (completed) {
+      // Прибавляем награду к текущему балансу
+      final int newBalance = currentBalance + stars;
+      await db.updateUserStars(userId, newBalance);
+      print("Звёзды начислены: +$stars. Новый баланс: $newBalance");
+    } else {
+      // Вычитаем награду из баланса (защита от ухода в минус)
+      int newBalance = currentBalance - stars;
+      if (newBalance < 0) newBalance = 0;
+      await db.updateUserStars(userId, newBalance);
+      print("Звёзды списаны: -$stars. Новый баланс: $newBalance");
+    }
   }
 }

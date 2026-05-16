@@ -331,27 +331,41 @@ class DatabaseHelper {
       'tasks',
       where: 'start_date <= ? AND end_date >= ?',
       whereArgs: [
-        end.toIso8601String(),   // задача должна начинаться до конца периода
-        start.toIso8601String(), // задача должна заканчиваться после начала периода
+        end.toIso8601String(),
+        start.toIso8601String(),
       ],
       orderBy: 'start_date ASC',
     );
 
-    return result.map((row) => Task.fromMap(row)).toList();
+    final List<Task> tasks = [];
+
+    for (final row in result) {
+      final task = Task.fromMap(row);
+
+      // определяем, выполнена ли задача именно в выбранный день
+      task.completed = await isTaskCompletedOnDate(
+        task.id!,
+        start,   // используем дату, на которую открыли день / bottom sheet
+      );
+
+      tasks.add(task);
+    }
+
+    return tasks;
   }
+
   /// Проверяет, считается ли задача выполненной именно в этот день
   Future<bool> isTaskCompletedOnDate(int taskId, DateTime date) async {
     final db = await database;
+    final dateStr = date.toIso8601String().substring(0, 10);
 
     final result = await db.rawQuery('''
     SELECT COUNT(*) as count 
-    FROM task_completions 
+    FROM task_progress 
     WHERE task_id = ? 
-      AND completion_date = ?
-  ''', [
-      taskId,
-      date.toIso8601String().substring(0, 10), // yyyy-MM-dd
-    ]);
+      AND date = ? 
+      AND completed = 1
+  ''', [taskId, dateStr]);
 
     return (Sqflite.firstIntValue(result) ?? 0) > 0;
   }
@@ -390,8 +404,7 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  /// Начисление/списание звёзд при отметке выполнения задачи в конкретный день
-  /// Обновляет статус выполнения задачи за конкретный день и начисляет/списывает звёзды
+  /// Обновляет статус выполнения задачи за конкретный день и сохраняет структуру дней
   Future<void> updateTaskCompleted({
     required int taskId,
     required DateTime date,
@@ -400,26 +413,16 @@ class DatabaseHelper {
     final db = await database;
     final dateStr = date.toIso8601String().substring(0, 10); // yyyy-mm-dd
 
-    if (completed) {
-      // Добавляем/обновляем запись о выполнении в этот день
-      await db.insert(
-        'task_progress',
-        {
-          'task_id': taskId,
-          'date': dateStr,
-          'completed': 1,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    } else {
-      // Удаляем запись о выполнении
-      await db.delete(
-        'task_progress',
-        where: 'task_id = ? AND date = ?',
-        whereArgs: [taskId, dateStr],
-      );
-    }
-
+    // Вместо удаления строки при значении false, мы всегда перезаписываем её статус (1 или 0)
+    await db.insert(
+      'task_progress',
+      {
+        'task_id': taskId,
+        'date': dateStr,
+        'completed': completed ? 1 : 0, // Сохраняем 0, чтобы задача оставалась в подсчете total
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     print("Задача $taskId на $dateStr отмечена как ${completed ? 'выполненная' : 'невыполненная'}");
   }
 
@@ -718,8 +721,12 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.ignore, // если уже есть, то не дублировать
     );
 
-    // Начисляем звёзды
-    await updateUserStars(userId, starsReward);
+    // Получаем текущий баланс и ПРИБАВЛЯЕМ награду
+    final currentBalance = await getUserStars();
+    final newBalance = currentBalance + starsReward;
+
+    await updateUserStars(userId, newBalance);
+    print("Достижение $achievementKey разблокировано! +$starsReward звёзд. Новый баланс: $newBalance");
   }
 
   // Проверить, выполнено ли достижение
