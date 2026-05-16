@@ -27,7 +27,7 @@ class DatabaseHelper {
 
       return await openDatabase(
         path,
-        version: 6,                    // увеличиваем версию при изменении структуры
+        version: 7,                    // увеличиваем версию при изменении структуры
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -125,11 +125,21 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 6) {
-      await db.execute('ALTER TABLE tasks ADD COLUMN completed INTEGER DEFAULT 0');
+    print("Обновление базы данных с версии $oldVersion на $newVersion");
+
+    if (oldVersion < 5) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN completed INTEGER DEFAULT 0');
+        print("Столбец completed успешно добавлен");
+      } catch (e) {
+        print("Столбец completed уже существует или другая ошибка: $e");
+        // Игнорируем ошибку, если столбец уже есть
+      }
     }
-    print("Обновление базы с версии $oldVersion на $newVersion");
-    // можно добавлять новые столбцы при обновлении версии
+
+    if (oldVersion < 6) {
+      // Здесь можно добавлять следующие миграции
+    }
   }
 
   Future close() async {

@@ -1164,7 +1164,10 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  
+
   void showDayTasksBottomSheet() { //возможно улучшение?
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,               // позволяет full-screen

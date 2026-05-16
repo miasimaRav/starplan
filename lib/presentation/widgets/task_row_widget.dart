@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/models/task_model.dart';
 
-class TaskRowWidget extends StatelessWidget {
+class TaskRowWidget extends StatefulWidget {
   final Task task;
   final VoidCallback onDelete;
   final ValueChanged<bool?> onChanged;
@@ -14,6 +14,19 @@ class TaskRowWidget extends StatelessWidget {
   });
 
   @override
+  State<TaskRowWidget> createState() => _TaskRowWidgetState();
+}
+
+class _TaskRowWidgetState extends State<TaskRowWidget> {
+  late bool isCompleted;
+
+  @override
+  void initState() {
+    super.initState();
+    isCompleted = widget.task.completed;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -21,7 +34,7 @@ class TaskRowWidget extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              task.title,
+              widget.task.title,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
@@ -29,8 +42,12 @@ class TaskRowWidget extends StatelessWidget {
             ),
           ),
           Checkbox(
-            value: task.completed,
-            onChanged: onChanged,
+            value: isCompleted,
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => isCompleted = value);
+              widget.onChanged(value);
+            },
           ),
         ],
       ),
