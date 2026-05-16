@@ -102,23 +102,42 @@ class HomePageState extends State<HomePage> {
     });
   }
 
-  // Обновление всех данных текущего представления
-// Обновление всех данных текущего представления без конфликтов очистки данных
+// Обновление всех данных текущего представления и мотивационной карточки
   Future<void> _refreshCurrentView() async {
     if (!mounted) return;
 
-    // Сначала загружаем общую карту месяца (она безопасно очистит старое состояние через clear())
+    // Сначала загружаем общую карту месяца
     await loadMonthStats(currentMonth);
 
-    // Только ПОСЛЕ этого точечно обновляем задачи и показатели выбранного дня
+    // Точечно обновляем задачи и показатели выбранного дня
     await Future.wait([
-      loadTasks(selectedDate),        // обновляем список задач + их completed
-      loadDayStats(selectedDate),     // накладываем точную статистику поверх карты месяца
+      loadTasks(selectedDate),    // обновляет список _dayTasks
+      loadDayStats(selectedDate), // накладывает точную статистику на выбранный день
     ]);
 
-    setState(() {}); // Принудительно перерисовываем интерфейс и календарь
-  }
+    // ЛОГИКА ДЛЯ МОТИВАЦИОННОЙ КАРТОЧКИ:
+    // Считаем дни на основе карты `days`, которую только что обновил loadMonthStats
+    int activeDays = 0;
+    int completedDays = 0;
 
+    days.forEach((date, status) {
+      // Если в этот день была хоть одна задача
+      if (status.totalTasks > 0) {
+        activeDays++;
+
+        // Если все задачи в этот день выполнены
+        if (status.doneTasks == status.totalTasks) {
+          completedDays++;
+        }
+      }
+    });
+
+    // Принудительно перерисовываем интерфейс с новыми подсчитанными цифрами
+    setState(() {
+      activeDaysInMonth = activeDays;
+      completedDaysInMonth = completedDays;
+    });
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -163,10 +182,15 @@ class HomePageState extends State<HomePage> {
   void addTasksBottomSheet() {
     // Локальное состояние внутри bottom sheet
     String? titleError;
-    DateTime? startDate;
-    DateTime? endDate;
+
+    // Устанавливаем выбранную на главном экране дату по умолчанию
+    DateTime? startDate = selectedDate;
+    DateTime? endDate = selectedDate;
+
     int selectedDifficulty = 1;
-    int calculatedStars = 0;
+
+    // Считаем начальные звёзды (1 день * сложность 1 = 1 звезда)
+    int calculatedStars = selectedDifficulty * 1;
 
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
@@ -380,7 +404,8 @@ class HomePageState extends State<HomePage> {
                         start: startDate,
                         end: endDate,
                         onPickStart: () async {
-                          final picked = await pickDate(context);
+                          // Передаем текущую дату начала или выбранную на экране
+                          final picked = await pickDate(context, startDate ?? selectedDate);
                           if (picked != null) {
                             setSheetState(() {
                               startDate = picked;
@@ -389,7 +414,7 @@ class HomePageState extends State<HomePage> {
                           }
                         },
                         onPickEnd: () async {
-                          final picked = await pickDate(context);
+                          final picked = await pickDate(context, startDate ?? selectedDate);
                           if (picked != null) {
                             setSheetState(() {
                               endDate = picked;
@@ -432,10 +457,7 @@ class HomePageState extends State<HomePage> {
           ),
         ),
       ),
-    ).whenComplete(() {
-      titleController.dispose();
-      descriptionController.dispose();
-    });
+    );
   }
 
   Widget buildSectionTitle(String title) => Padding(
@@ -545,11 +567,12 @@ class HomePageState extends State<HomePage> {
   );
 
 
-  Future<DateTime?> pickDate(BuildContext context) {
+// Передаем текущую установленную дату в качестве начальной для календаря
+  Future<DateTime?> pickDate(BuildContext context, DateTime initial) {
     return showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020), // ← ключевая строка
+      initialDate: initial, // <-- Откроется на уже выбранном дне
+      firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
   }
@@ -1310,10 +1333,10 @@ class HomePageState extends State<HomePage> {
 
 // карточка внизу
   Widget buildMotivationCard() {
-    if (activeDaysInMonth == 0) {
-      // если в месяце нет задач — карточку не показываем
-      return const SizedBox.shrink();
-    }
+    // if (activeDaysInMonth == 0) {
+    //   // если в месяце нет задач — карточку не показываем
+    //   return const SizedBox.shrink();
+    // }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1338,7 +1361,9 @@ class HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Ты выполнил $completedDaysInMonth из $activeDaysInMonth дней в этом месяце',
+                    activeDaysInMonth == 0
+                        ? 'В этом месяце пока нет активных дней. Время планировать!'
+                        : 'Продуктивных дней в этом месяце: $completedDaysInMonth из $activeDaysInMonth!',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
