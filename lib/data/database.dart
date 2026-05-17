@@ -1,7 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-import '../presentation/pages/home_page.dart';
 import 'models/day_status.dart';
 import 'models/task_model.dart';
 
@@ -352,6 +351,21 @@ class DatabaseHelper {
     }
 
     return tasks;
+  }
+
+  /// Чтобы контроллер мог извлечь задачу по её id
+  Future<Task?> getTaskById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return Task.fromMap(maps.first);
+    }
+    return null;
   }
 
   /// Проверяет, считается ли задача выполненной именно в этот день

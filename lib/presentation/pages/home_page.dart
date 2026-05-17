@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:starplan/core/constants/app_colors.dart';
-import 'package:starplan/presentation/pages/profile_page.dart';
 
-import '../../data/database.dart';
 import '../../data/models/day_status.dart';
 import '../../data/models/task_model.dart';
 import '../../logic/home_controller.dart';
@@ -81,6 +79,9 @@ class HomePageState extends State<HomePage> {
           type: type,
         );
       }
+
+      //пересчитываем карточку, если изменилось состояние конкретного дня
+      _updateMotivationStats();
     });
   }
 
@@ -99,6 +100,9 @@ class HomePageState extends State<HomePage> {
       days
         ..clear()
         ..addAll(newDays);
+
+      // автоматически пересчитываем карточку при загрузке месяца
+      _updateMotivationStats();
     });
   }
 
@@ -115,28 +119,6 @@ class HomePageState extends State<HomePage> {
       loadDayStats(selectedDate), // накладывает точную статистику на выбранный день
     ]);
 
-    // ЛОГИКА ДЛЯ МОТИВАЦИОННОЙ КАРТОЧКИ:
-    // Считаем дни на основе карты `days`, которую только что обновил loadMonthStats
-    int activeDays = 0;
-    int completedDays = 0;
-
-    days.forEach((date, status) {
-      // Если в этот день была хоть одна задача
-      if (status.totalTasks > 0) {
-        activeDays++;
-
-        // Если все задачи в этот день выполнены
-        if (status.doneTasks == status.totalTasks) {
-          completedDays++;
-        }
-      }
-    });
-
-    // Принудительно перерисовываем интерфейс с новыми подсчитанными цифрами
-    setState(() {
-      activeDaysInMonth = activeDays;
-      completedDaysInMonth = completedDays;
-    });
   }
   @override
   Widget build(BuildContext context) {
@@ -866,7 +848,6 @@ class HomePageState extends State<HomePage> {
                         taskId: _dayTasks[index].id!,
                         date: selectedDate, //дата задачи которую отметили
                         completed: value,
-                        stars: _dayTasks[index].stars,
                       );
                       await _refreshCurrentView();
                     },
@@ -1028,7 +1009,6 @@ class HomePageState extends State<HomePage> {
                         taskId: _dayTasks[index].id!,
                         date: selectedDate,      // передаём дату, на которой отметили
                         completed: value,
-                        stars: _dayTasks[index].stars,
                       );
 
                       await _refreshCurrentView();
@@ -1265,7 +1245,6 @@ class HomePageState extends State<HomePage> {
                                   taskId: _dayTasks[index].id!,
                                   date: selectedDate,      // передаём дату, на которой отметили
                                   completed: value,
-                                  stars: _dayTasks[index].stars,
                                 );
 
                                 await _refreshCurrentView();
@@ -1331,13 +1310,78 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-// карточка внизу
-  Widget buildMotivationCard() {
-    // if (activeDaysInMonth == 0) {
-    //   // если в месяце нет задач — карточку не показываем
-    //   return const SizedBox.shrink();
-    // }
+  // Централизованный метод для пересчета статистики мотивационной карточки
+  void _updateMotivationStats() {
+    int activeDays = 0;
+    int completedDays = 0;
 
+    days.forEach((date, status) {
+      // Если в этот день была хоть одна задача
+      if (status.totalTasks > 0) {
+        activeDays++;
+
+        // Если все задачи в этот день выполнены
+        if (status.doneTasks == status.totalTasks) {
+          completedDays++;
+        }
+      }
+    });
+
+    activeDaysInMonth = activeDays;
+    completedDaysInMonth = completedDays;
+  }
+
+  // мотивирующая карточка внизу страницы
+  Widget buildMotivationCard() {
+    // Динамический подсчет статистики прямо в момент рендеринга
+    int activeDays = 0;
+    int completedDays = 0;
+
+    days.forEach((date, status) {
+      // Фильтруем строго по текущему месяцу и году, чтобы избежать багов при переходе границ месяцев
+      if (date.month == currentMonth.month && date.year == currentMonth.year) {
+        if (status.totalTasks > 0) {
+          activeDays++;
+          if (status.doneTasks == status.totalTasks) {
+            completedDays++;
+          }
+        }
+      }
+    });
+
+    // Декларативное определение текстов и иконок для разных сценариев
+    String title;
+    String subtitle;
+    IconData cardIcon;
+    Color iconColor;
+
+    if (activeDays == 0) {
+      // Сценарий 1: Задач на месяц вообще нет
+      title = 'В этом месяце пока нет активных дней. Время планировать!';
+      subtitle = 'Каждая большая цель начинается с первой задачи.';
+      cardIcon = Icons.calendar_today_rounded;
+      iconColor = Colors.white70;
+    } else if (completedDays == 0) {
+      // Сценарий 2: Задачи добавлены (например, в начале недели), но ещё не завершены
+      title = 'Запланировано дней с задачами: $activeDays. Отличный старт!';
+      subtitle = 'Продуктивные дни впереди! Сделай первый шаг и выполни задачу сегодня.';
+      cardIcon = Icons.rocket_launch_rounded;
+      iconColor = AppColors.primary;
+    } else if (completedDays == activeDays) {
+      // Сценарий 3: Идеальный результат (все активные дни завершены)
+      title = 'Продуктивных дней: $completedDays из $activeDays! Идеальный результат!';
+      subtitle = 'Потрясающе! Ты закрыл абсолютно все запланированные задачи!';
+      cardIcon = Icons.emoji_events_rounded;
+      iconColor = Colors.amber;
+    } else {
+      // Сценарий 4: Обычный рабочий процесс (часть дней выполнена, часть в процессе)
+      title = 'Продуктивных дней в этом месяце: $completedDays из $activeDays!';
+      subtitle = 'Хороший темп! Продолжай в том же духе, у тебя всё получается!';
+      cardIcon = Icons.star_rounded;
+      iconColor = AppColors.primary;
+    }
+
+    // 3. Возвращаем ваш оригинальный виджет с новыми динамическими данными
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -1354,27 +1398,23 @@ class HomePageState extends State<HomePage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.star, color: AppColors.primary),
+            Icon(cardIcon, color: iconColor),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    activeDaysInMonth == 0
-                        ? 'В этом месяце пока нет активных дней. Время планировать!'
-                        : 'Продуктивных дней в этом месяце: $completedDaysInMonth из $activeDaysInMonth!',
+                    title,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
-                    completedDaysInMonth == activeDaysInMonth
-                        ? 'Идеальный месяц '
-                        : 'Продолжай в том же духе!',
+                    subtitle,
                     style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
