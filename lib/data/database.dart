@@ -440,6 +440,31 @@ class DatabaseHelper {
     print("Задача $taskId на $dateStr отмечена как ${completed ? 'выполненная' : 'невыполненная'}");
   }
 
+  Future<void> updateTask({
+    required int id,
+    String? title,
+    String? description,
+    int? difficulty,
+    DateTime? startDate,
+    DateTime? endDate,
+    int? stars,
+  }) async {
+    final db = await database;
+    await db.update(
+      'tasks',
+      {
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (difficulty != null) 'difficulty': difficulty,
+        if (startDate != null) 'start_date': startDate.toIso8601String(),
+        if (endDate != null) 'end_date': endDate.toIso8601String(),
+        if (stars != null) 'stars': stars,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<Map<String, int>> getTasksCountForDate(DateTime date) async {
     final db = await database;
     final dateStr = date.toIso8601String().substring(0, 10);

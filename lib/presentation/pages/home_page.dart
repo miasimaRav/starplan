@@ -161,28 +161,29 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  void addTasksBottomSheet() {
-    // Локальное состояние внутри bottom sheet
+  Future<void> addTasksBottomSheet({Task? taskToEdit}) async {
+    final isEditing = taskToEdit != null;
     String? titleError;
 
-    // Устанавливаем выбранную на главном экране дату по умолчанию
-    DateTime? startDate = selectedDate;
-    DateTime? endDate = selectedDate;
+    // Если редактируем — берем даты из задачи, если нет — текущую выбранную дату
+    DateTime? startDate = isEditing ? taskToEdit.startDate : selectedDate;
+    DateTime? endDate = isEditing ? taskToEdit.endDate : selectedDate;
 
-    int selectedDifficulty = 1;
+    // Сложность: старая из задачи или 1 по умолчанию
+    int selectedDifficulty = isEditing ? taskToEdit.difficulty : 1;
 
-    // Считаем начальные звёзды (1 день * сложность 1 = 1 звезда)
-    int calculatedStars = selectedDifficulty * 1;
+    // Звёзды: старые из задачи или считаем стартовые для новой задачи
+    int calculatedStars = isEditing ? taskToEdit.stars : (selectedDifficulty * 1);
 
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
+    // Инициализируем текстовые поля старыми данными при редактировании
+    final titleController = TextEditingController(text: isEditing ? taskToEdit.title : '');
+    final descriptionController = TextEditingController(text: isEditing ? (taskToEdit.description ?? '') : '');
 
-    // Функция для пересчёта звёзд
+    // Функция для пересчёта звёзд (остаётся прежней)
     void updateStars(StateSetter setSheetState) {
       DateTime taskStart = startDate ?? selectedDate;
       DateTime taskEnd = endDate ?? taskStart;
 
-      // Если конец раньше начала — меняем местами
       if (taskEnd.isBefore(taskStart)) {
         final tmp = taskStart;
         taskStart = taskEnd;
@@ -232,9 +233,10 @@ class HomePageState extends State<HomePage> {
                           ),
                         ),
                       ),
-                      const Text(
-                        'Новое задание',
-                        style: TextStyle(
+                      // Динамический заголовок шапки
+                      Text(
+                        isEditing ? 'Редактирование' : 'Новое задание',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
@@ -242,9 +244,8 @@ class HomePageState extends State<HomePage> {
                       ),
                       GestureDetector(
                         onTap: titleController.text.trim().isEmpty
-                            ? null  // отключаем нажатие
+                            ? null
                             : () async {
-                          // Валидация
                           final title = titleController.text.trim();
                           if (title.isEmpty) {
                             setSheetState(() {
@@ -264,7 +265,6 @@ class HomePageState extends State<HomePage> {
                           DateTime taskStart = startDate ?? selectedDate;
                           DateTime taskEnd = endDate ?? taskStart;
 
-                          // Корректируем порядок дат
                           if (taskEnd.isBefore(taskStart)) {
                             final tmp = taskStart;
                             taskStart = taskEnd;
@@ -274,15 +274,27 @@ class HomePageState extends State<HomePage> {
                           final days = taskEnd.difference(taskStart).inDays + 1;
                           final stars = selectedDifficulty * days;
 
-                          // Сохраняем в базу
-                          await controller.createTask(
-                            title: title,
-                            description: description,
-                            difficulty: selectedDifficulty,
-                            startDate: taskStart,
-                            endDate: taskEnd,
-                            stars: stars,
-                          );
+                          // РАЗВЕТВЛЕНИЕ: Сохранение (Create) или Обновление (Update)
+                          if (isEditing) {
+                            await controller.updateTask(
+                              id: taskToEdit.id!,
+                              title: title,
+                              description: description,
+                              difficulty: selectedDifficulty,
+                              startDate: taskStart,
+                              endDate: taskEnd,
+                              stars: stars,
+                            );
+                          } else {
+                            await controller.createTask(
+                              title: title,
+                              description: description,
+                              difficulty: selectedDifficulty,
+                              startDate: taskStart,
+                              endDate: taskEnd,
+                              stars: stars,
+                            );
+                          }
 
                           // Обновляем интерфейс
                           await Future.wait([
@@ -298,7 +310,7 @@ class HomePageState extends State<HomePage> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: const Text(
-                            'Добавить',
+                            'Сохранить',
                             style: TextStyle(
                               color: AppColors.primary,
                               fontSize: 18,
@@ -386,7 +398,6 @@ class HomePageState extends State<HomePage> {
                         start: startDate,
                         end: endDate,
                         onPickStart: () async {
-                          // Передаем текущую дату начала или выбранную на экране
                           final picked = await pickDate(context, startDate ?? selectedDate);
                           if (picked != null) {
                             setSheetState(() {
@@ -396,7 +407,7 @@ class HomePageState extends State<HomePage> {
                           }
                         },
                         onPickEnd: () async {
-                          final picked = await pickDate(context, startDate ?? selectedDate);
+                          final picked = await pickDate(context, endDate ?? selectedDate); // Здесь лучше передавать текущую endDate, чтобы календарь открывался на ней
                           if (picked != null) {
                             setSheetState(() {
                               endDate = picked;
@@ -559,21 +570,22 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-
-
-// Верхний бар с месяцем и кнопками меню/добавить
+// Верхний бар с месяцем строго по центру (без накладывания)
   Widget buildTopBar() {
     final monthTitle = '$currentMonthName ${selectedDate.year}';
+
+    // Ширина одной стандартной иконки-кнопки во Flutter обычно 48 пикселей
+    //  две кнопки справа (48 * 2 = 96), делаем такой же пустой отступ слева для баланса
+    const double buttonsWidth = 96.0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () {
-              // TODO: открыть боковое меню
-            },
-            icon: const Icon(Icons.menu, color: Colors.white),
-          ),
+          // Левый невидимый отступ для идеального центрирования текста
+          const SizedBox(width: buttonsWidth),
+
+          // Название месяца (занимает всё центральное пространство)
           Expanded(
             child: Center(
               child: GestureDetector(
@@ -585,19 +597,150 @@ class HomePageState extends State<HomePage> {
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis, // если экран совсем узкий,
+                  // текст аккуратно сократится
                 ),
               ),
-
             ),
           ),
-          IconButton(
-            onPressed: () {
-              addTasksBottomSheet();
-            },
-            icon: const Icon(Icons.add, color: Colors.white),
+
+          //Блок кнопок справа (ширина как раз около 96 пикселей)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () {
+                  _showRulesDialog(context);
+                },
+                icon: const Icon(Icons.help_outline, color: Colors.white70),
+                tooltip: 'Правила начисления звёзд',
+              ),
+              IconButton(
+                onPressed: () {
+                  addTasksBottomSheet();
+                },
+                icon: const Icon(Icons.add, color: Colors.white),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  //диалоговое окно
+  void _showRulesDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2E), // Темный фон
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.star, color: Colors.amber, size: 28),
+              SizedBox(width: 10),
+              Text(
+                'Правила начисления',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Выполняйте задачи, зарабатывайте звёзды и открывайте новые достижения!',
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                const SizedBox(height: 20),
+
+                // Блок 1: Однодневные задачи
+                _buildRuleRow(
+                  icon: Icons.looks_one,
+                  title: 'Обычные задачи (1 день)',
+                  description: 'Вы получаете всю стоимость задачи сразу при её выполнении.',
+                ),
+                const SizedBox(height: 16),
+
+                // Блок 2: Многодневные задачи
+                _buildRuleRow(
+                  icon: Icons.calendar_month,
+                  title: 'Многодневные задачи',
+                  description:
+                      '• Каждый промежуточный день вы получаете по 1 ⭐ за поддержание привычки.\n'
+                      '• В финальный день вам начисляется вся оставшаяся сумма от общей стоимости задачи!',
+                ),
+                const SizedBox(height: 12),
+
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 8),
+                const Text(
+                  'Если вы снимете галочку с выполненной задачи, заработанные за этот день звёзды спишутся!',
+                  style: TextStyle(color: Colors.redAccent, fontSize: 14, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.amber,
+              ),
+              child: const Text(
+                'Понятно',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+// Вспомогательный виджет для красивой строки правил начисления звезд
+  Widget _buildRuleRow({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.amberAccent, size: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 15,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -836,21 +979,39 @@ class HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.all(12),
                 itemCount: _dayTasks.length,
                 itemBuilder: (context, index) {
-                  return TaskRowWidget(
-                    task: _dayTasks[index],
-                    onDelete: () async {
-                      await controller.deleteTask(_dayTasks[index].id!);
-                      await _refreshCurrentView();
+                  return GestureDetector(
+                    onLongPress: () async {
+                      // 1. Открываем меню действий
+                      final String? action = await _showActionMenu(context, _dayTasks[index]);
+
+                      if (action == 'edit') {
+                        // 2. Ждем, пока пользователь отредактирует задачу
+                        await addTasksBottomSheet(taskToEdit: _dayTasks[index]);
+                        // 3. Обновляем главный экран (в режиме дня setState обновит всё сразу)
+                        setState(() {});
+                      } else if (action == 'delete') {
+                        // 2. Удаляем из БД
+                        await controller.deleteTask(_dayTasks[index].id!);
+                        await _refreshCurrentView();
+                        setState(() {});
+                      }
                     },
-                    onChanged: (value) async {
-                      if (value == null) return;
-                      await controller.updateTaskProgress(
-                        taskId: _dayTasks[index].id!,
-                        date: selectedDate, //дата задачи которую отметили
-                        completed: value,
-                      );
-                      await _refreshCurrentView();
-                    },
+                      child: TaskRowWidget(
+                      task: _dayTasks[index],
+                      onDelete: () async {
+                        await controller.deleteTask(_dayTasks[index].id!);
+                        await _refreshCurrentView();
+                      },
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await controller.updateTaskProgress(
+                          taskId: _dayTasks[index].id!,
+                          date: selectedDate, //дата задачи которую отметили
+                          completed: value,
+                        );
+                        await _refreshCurrentView();
+                      },
+                    ),
                   );
                 },
               ),
@@ -996,23 +1157,41 @@ class HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.all(12),
                 itemCount: _dayTasks.length,
                 itemBuilder: (context, index) {
-                  return TaskRowWidget(
-                    task: _dayTasks[index],
-                    onDelete: () async {
-                      await controller.deleteTask(_dayTasks[index].id!);
-                      await _refreshCurrentView();
-                    },
-                    onChanged: (value) async {
-                      if (value == null) return;
+                  return GestureDetector(
+                    onLongPress: () async {
+                      // 1. Открываем меню действий
+                      final String? action = await _showActionMenu(context, _dayTasks[index]);
 
-                      await controller.updateTaskProgress(
-                        taskId: _dayTasks[index].id!,
-                        date: selectedDate,      // передаём дату, на которой отметили
-                        completed: value,
-                      );
-
-                      await _refreshCurrentView();
+                      if (action == 'edit') {
+                        // 2. Ждем, пока пользователь отредактирует задачу
+                        await addTasksBottomSheet(taskToEdit: _dayTasks[index]);
+                        // 3. Обновляем главный экран (в режиме дня setState обновит всё сразу)
+                        setState(() {});
+                      } else if (action == 'delete') {
+                        // 2. Удаляем из БД
+                        await controller.deleteTask(_dayTasks[index].id!);
+                        await _refreshCurrentView();
+                        setState(() {});
+                      }
                     },
+                      child: TaskRowWidget(
+                      task: _dayTasks[index],
+                      onDelete: () async {
+                        await controller.deleteTask(_dayTasks[index].id!);
+                        await _refreshCurrentView();
+                      },
+                      onChanged: (value) async {
+                        if (value == null) return;
+
+                        await controller.updateTaskProgress(
+                          taskId: _dayTasks[index].id!,
+                          date: selectedDate,      // передаём дату, на которой отметили
+                          completed: value,
+                        );
+
+                        await _refreshCurrentView();
+                      },
+                    ),
                   );
                 },
               ),
@@ -1166,7 +1345,7 @@ class HomePageState extends State<HomePage> {
 
   
 
-  void showDayTasksBottomSheet() { //возможно улучшение?
+  void showDayTasksBottomSheet() {
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
@@ -1231,25 +1410,53 @@ class HomePageState extends State<HomePage> {
                           controller: scrollController,
                           itemCount: _dayTasks.length,
                           itemBuilder: (context, index) {
-                            return TaskRowWidget(
-                              task: _dayTasks[index],
-                              onDelete: () async {
-                                await controller.deleteTask(_dayTasks[index].id!);
-                                await _refreshCurrentView();
-                                setBottomSheetState(() {});
-                              },
-                              onChanged: (value) async {
-                                if (value == null) return;
+                            final task = _dayTasks[index]; // Выносим для читаемости кода
 
-                                await controller.updateTaskProgress(
-                                  taskId: _dayTasks[index].id!,
-                                  date: selectedDate,      // передаём дату, на которой отметили
-                                  completed: value,
-                                );
+                            return GestureDetector(
+                              // НАЧАЛО: Ловим долгое нажатие на карточку задачи
+                              onLongPress: () async {
+                                // Открываем меню действий и ждем, что выберет пользователь
+                                final String? action = await _showActionMenu(context, task);
 
-                                await _refreshCurrentView();
-                                setBottomSheetState(() {});
+                                if (action == 'edit') {
+                                  // Если выбрали редактировать — открываем наше обновленное окно
+                                  // Добавляем await, чтобы код остановился и ждал,
+                                  // пока addTasksBottomSheet закроется
+                                  await addTasksBottomSheet(taskToEdit: task);
+                                  // Когда окно редактирования закрылось
+                                  // принудительно обновляем список задач на день
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                } else if (action == 'delete') {
+                                  // Если выбрали удалить — удаляем, обновляем базу
+                                  // и перерисовываем текущий BottomSheet
+                                  await controller.deleteTask(task.id!);
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                }
                               },
+
+
+                              child: TaskRowWidget(
+                                task: task,
+                                onDelete: () async {
+                                  await controller.deleteTask(task.id!);
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                },
+                                onChanged: (value) async {
+                                  if (value == null) return;
+
+                                  await controller.updateTaskProgress(
+                                    taskId: task.id!,
+                                    date: selectedDate,      // передаём дату, на которой отметили
+                                    completed: value,
+                                  );
+
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                },
+                              ),
                             );
                           },
                         ),
@@ -1261,6 +1468,55 @@ class HomePageState extends State<HomePage> {
               },
             );
           },
+        );
+      },
+    );
+  }
+
+  Future<String?> _showActionMenu(BuildContext context, Task task) {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  task.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Divider(color: Colors.white12, height: 1),
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.amber),
+                title: const Text('Редактировать', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  // Закрываем меню действий и возвращаем строку 'edit'
+                  Navigator.pop(context, 'edit');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.redAccent),
+                title: const Text('Удалить', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  // Закрываем меню действий и возвращаем строку 'delete'
+                  Navigator.pop(context, 'delete');
+                },
+              ),
+            ],
+          ),
         );
       },
     );

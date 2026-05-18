@@ -169,12 +169,16 @@ class _ProfileContent extends StatelessWidget {
                 'Редактирование профиля',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
               ),
             ),
           ),
+          // правый невидимый отступ для идеального центрирования текста
+          const SizedBox(width: 48),
         ],
       ),
     );

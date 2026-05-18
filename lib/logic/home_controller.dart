@@ -127,4 +127,24 @@ class HomeController {
       print("Гибридный подход (-): списано $starsToAward звёзд. Новый баланс: $newBalance");
     }
   }
+
+  Future<void> updateTask({
+    required int id,
+    required String title,
+    required String? description,
+    required int difficulty,
+    required DateTime startDate,
+    required DateTime endDate,
+    required int stars,
+  }) async {
+    await db.updateTask(
+      id: id,
+      title: title,
+      description: description,
+      difficulty: difficulty,
+      startDate: startDate,
+      endDate: endDate,
+      stars: stars,
+    );
+  }
 }
