@@ -10,6 +10,7 @@ class ShopPage extends StatefulWidget {
 }
 
 class _ShopPageState extends State<ShopPage> {
+  final AppSettings _settings = AppSettings();
   int currentBalance = 100;
   int selectedCategory = 2;
 
@@ -20,7 +21,15 @@ class _ShopPageState extends State<ShopPage> {
   void initState() {
     super.initState();
     _loadData();
+    _loadSettingsAndData();
+
   }
+
+  Future<void> _loadSettingsAndData() async {
+    await _settings.loadSettings(); // Загружаем текущую активную тему
+    await _loadData(); // Загружаем данные БД
+  }
+
 
   Future<void> _loadData() async {
     //await DatabaseHelper.instance.initShopItems();
@@ -258,9 +267,22 @@ class _ShopPageState extends State<ShopPage> {
           child: _ShopItemCard(
             item: item,
             purchased: purchased,
+            isActiveTheme: _settings.currentTheme == item['key'], // Передаем флаг активности
             onBuy: () => _buyItem(item),
+            onApply: () async {
+              if (item['type'] == 'theme') {
+                await _settings.setTheme(item['key'] ?? item['name']);
+              } else if (item['type'] == 'avatar') {
+                await _settings.setAvatar(item['key'] ?? item['name']);
+              }
+              setState(() {}); // Перерисовываем страницу магазина с новой темой!
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Успешно применено!'), backgroundColor: Colors.green),
+              );
+            },
           ),
         );
+
       }).toList(),
     );
   }
@@ -293,20 +315,23 @@ class _ShopPageState extends State<ShopPage> {
 class _ShopItemCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool purchased;
+  final bool isActiveTheme; // Добавили параметр
   final VoidCallback onBuy;
+  final VoidCallback onApply; // Заменили на чистый коллбек
 
   const _ShopItemCard({
     required this.item,
     required this.purchased,
+    required this.isActiveTheme,
     required this.onBuy,
+    required this.onApply,
   });
 
   @override
-  @override
   Widget build(BuildContext context) {
     final isTheme = item['type'] == 'theme';
-    final isAvatar = item['type'] == 'avatar';
-    final rarityColor = _getRarityColor(item['cost'] as int);
+    final cost = item['cost'] as int;
+    final rarityColor = _getRarityColor(cost);
 
     return Container(
       height: 110,
@@ -338,9 +363,7 @@ class _ShopItemCard extends StatelessWidget {
               ),
             ),
           ),
-
           const SizedBox(width: 12),
-
           // Информация о товаре
           Expanded(
             child: Column(
@@ -368,7 +391,7 @@ class _ShopItemCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        _getRarityLabel(item['cost'] as int),
+                        _getRarityLabel(cost),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
@@ -380,7 +403,7 @@ class _ShopItemCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  item['type'] as String,
+                  isTheme ? 'Оформление приложения' : (item['type'] as String),
                   style: const TextStyle(color: Colors.white70, fontSize: 11),
                 ),
                 const Spacer(),
@@ -389,7 +412,7 @@ class _ShopItemCard extends StatelessWidget {
                     Image.asset('assets/images/icons/coin.png', width: 16, height: 16),
                     const SizedBox(width: 4),
                     Text(
-                      '${item['cost']}',
+                      '$cost',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
@@ -401,59 +424,63 @@ class _ShopItemCard extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // Кнопка
-          if (purchased)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00C853),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-              ),
-              onPressed: () async {
-                final settings = await AppSettings(); // создаём экземпляр
-                await settings.loadSettings();
-
-                if (isTheme) {
-                  await settings.setTheme(item['key'] ?? item['name']);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Тема применена'), backgroundColor: Colors.green),
-                  );
-                } else if (isAvatar) {
-                  await settings.setAvatar(item['key'] ?? item['name']);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Аватар установлен'), backgroundColor: Colors.green),
-                  );
-                }
-              },
-              child: const Text('Применить', style: TextStyle(fontSize: 12)),
-            )
-          else
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA22C),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-              ),
-              onPressed: onBuy,
-              child: const Text('Купить', style: TextStyle(fontSize: 12)),
-            ),
+          // Кнопка выбора состояния
+          _buildActionButton(),
         ],
       ),
     );
   }
 
+  Widget _buildActionButton() {
+    if (isActiveTheme) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white.withOpacity(0.2),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        ),
+        onPressed: null, // Кнопка отключена, т.к. тема уже активна
+        child: const Text('Активна', style: TextStyle(fontSize: 12, color: Colors.white70)),
+      );
+    }
+
+    if (purchased) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF00C853),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        ),
+        onPressed: onApply,
+        child: const Text('Применить', style: TextStyle(fontSize: 12, color: Colors.white)),
+      );
+    }
+
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFFFA22C),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      ),
+      onPressed: onBuy,
+      child: const Text('Купить', style: TextStyle(fontSize: 12, color: Colors.white)),
+    );
+  }
+
+  // Обновленные пороги редкости в соответствии с новыми ценами
   String _getRarityLabel(int cost) {
-    if (cost <= 300) return 'Обычный';
-    if (cost <= 700) return 'Редкий';
+    if (cost == 0) return 'Базовый';
+    if (cost <= 50) return 'Обычный';
+    if (cost <= 100) return 'Редкий';
     return 'Легендарный';
   }
 
   Color _getRarityColor(int cost) {
-    if (cost <= 300) return Colors.white.withOpacity(0.18);
-    if (cost <= 700) return const Color(0xFF4CC6FF);
+    if (cost == 0) return Colors.grey.withOpacity(0.4);
+    if (cost <= 50) return Colors.white.withOpacity(0.18);
+    if (cost <= 100) return const Color(0xFF4CC6FF);
     return const Color(0xFFFFC94B);
   }
 }
+

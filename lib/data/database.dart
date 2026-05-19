@@ -26,7 +26,7 @@ class DatabaseHelper {
 
       return await openDatabase(
         path,
-        version: 7,                    // увеличиваем версию при изменении структуры
+        version: 8,                    // увеличиваем версию при изменении структуры
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -150,84 +150,87 @@ class DatabaseHelper {
 
 // Инициализация начальных предметов магазина
   Future<void> _initDefaultUpgrades(Database db) async {
-    // Проверяем, есть ли уже записи в таблице upgrades
     final countResult = await db.rawQuery('SELECT COUNT(*) as cnt FROM upgrades');
     final count = Sqflite.firstIntValue(countResult) ?? 0;
-
     if (count > 0) {
       print("Магазин уже инициализирован ($count товаров)");
       return;
     }
 
     print("Инициализация магазина — добавляем товары...");
-
     final batch = db.batch();
 
-    // Темы
+    // Дефолтная тема (Всегда куплена)
     batch.insert('upgrades', {
-      'name': 'Тёмная тема',
+      'name': 'Станция "Земля"',
       'type': 'theme',
-      'cost': 350,
-      'purchased': 0,
-      'icon_path': 'assets/images/icons/theme_dark.png',
-      'key': 'dark',
+      'cost': 0,
+      'purchased': 1, // <--- Сразу доступна для применения!
+      'icon_path': 'assets/images/icons/theme_earth.png',
+      'key': 'default',
     });
 
+    // Светлая тема
     batch.insert('upgrades', {
-      'name': 'Космическая тема',
+      'name': 'Сверхновая',
       'type': 'theme',
-      'cost': 750,
+      'cost': 40,
+      'purchased': 0,
+      'icon_path': 'assets/images/icons/theme_supernova.png',
+      'key': 'supernova',
+    });
+
+    // OLED-темная тема
+    batch.insert('upgrades', {
+      'name': 'Глубокий космос',
+      'type': 'theme',
+      'cost': 90,
       'purchased': 0,
       'icon_path': 'assets/images/icons/theme_space.png',
       'key': 'space',
     });
 
-    // Аватары
     batch.insert('upgrades', {
-      'name': 'Аватар "Воин Света"',
+      'name': 'Воин Света',
       'type': 'avatar',
-      'cost': 500,
+      'cost': 60,
       'purchased': 0,
       'icon_path': 'assets/images/icons/avatar_warrior.png',
-
     });
-
     batch.insert('upgrades', {
-      'name': 'Аватар "Звёздный Маг"',
+      'name': 'Звёздный Маг',
       'type': 'avatar',
-      'cost': 650,
+      'cost': 80,
       'purchased': 0,
       'icon_path': 'assets/images/icons/avatar_mage.png',
     });
 
-    // Награды / трофеи
     batch.insert('upgrades', {
       'name': 'Бронзовый трофей',
       'type': 'trophy',
-      'cost': 200,
+      'cost': 30,
       'purchased': 0,
       'icon_path': 'assets/images/icons/trophy_bronze.png',
     });
-
     batch.insert('upgrades', {
       'name': 'Серебряный трофей',
       'type': 'trophy',
-      'cost': 550,
+      'cost': 70,
       'purchased': 0,
       'icon_path': 'assets/images/icons/trophy_silver.png',
     });
-
     batch.insert('upgrades', {
       'name': 'Золотой трофей',
       'type': 'trophy',
-      'cost': 1100,
+      'cost': 150,
       'purchased': 0,
       'icon_path': 'assets/images/icons/trophy_gold.png',
     });
 
     await batch.commit(noResult: true);
-    print('Начальные улучшения магазина успешно добавлены (7 товаров)');
+    print('Начальные улучшения магазина успешно добавлены (8 товаров)');
   }
+
 
   Future<Map<String, dynamic>?> getCurrentUser() async {
     final db = await database;
@@ -778,7 +781,5 @@ class DatabaseHelper {
     );
     return result.isNotEmpty;
   }
-
-
 
 }

@@ -479,14 +479,14 @@ class ProfileContent extends StatelessWidget {
                 title: 'Текущая\nсерия',
                 value: '$currentStreak',
                 background: const Color(0xFFB33A25),
-                iconPath: "",
+                iconPath: 'assets/images/icons/streak_record.png',
               ),
               const SizedBox(height: 8),
               StatCard(
                 title: 'Всего\nопыта',
                 value: '$totalXP',
                 background: const Color(0xFF4230A6),
-                iconPath: '',
+                iconPath: 'assets/images/icons/xp_icon.jpg', //заменить иконку
               ),
             ],
           ),
