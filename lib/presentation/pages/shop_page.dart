@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../core/app_settings.dart';
 import '../../data/database.dart';
+import '../../logic/ThemeProvider.dart';
 
 class ShopPage extends StatefulWidget {
-  const ShopPage({super.key});
+  final ThemeProvider themeProvider;
+  const ShopPage({super.key, required this.themeProvider});
 
   @override
   State<ShopPage> createState() => _ShopPageState();
@@ -262,27 +264,40 @@ class _ShopPageState extends State<ShopPage> {
     return Column(
       children: items.map((item) {
         final purchased = (item['purchased'] as int?) == 1;
+
+        // УНИВЕРСАЛЬНАЯ ПРОВЕРКА АКТИВНОСТИ:
+        final isActive = (item['type'] == 'theme' && _settings.currentTheme == item['key']) ||
+            (item['type'] == 'avatar' && _settings.currentAvatar == item['key']) ||
+            (item['type'] == 'trophy' && _settings.currentTrophy == item['key']);
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _ShopItemCard(
             item: item,
             purchased: purchased,
-            isActiveTheme: _settings.currentTheme == item['key'], // Передаем флаг активности
+            isActiveItem: isActive, // Передаем результат проверки
             onBuy: () => _buyItem(item),
             onApply: () async {
               if (item['type'] == 'theme') {
-                await _settings.setTheme(item['key'] ?? item['name']);
+                // widget.themeProvider даст доступ к провайдеру из конструктора
+                await widget.themeProvider.changeTheme(item['key'] ?? 'default');
               } else if (item['type'] == 'avatar') {
-                await _settings.setAvatar(item['key'] ?? item['name']);
+                await _settings.setAvatar(item['key'] ?? 'default');
+                setState(() {}); // Для аватара локального перерисовывания карточки пока достаточно
+              } else if (item['type'] == 'trophy') {
+                await _settings.setTrophy(item['key'] ?? 'none');
+                setState(() {});
               }
-              setState(() {}); // Перерисовываем страницу магазина с новой темой!
+
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Успешно применено!'), backgroundColor: Colors.green),
+                const SnackBar(
+                    content: Text('Успешно применено!'),
+                    backgroundColor: Colors.green
+                ),
               );
             },
           ),
         );
-
       }).toList(),
     );
   }
@@ -315,14 +330,14 @@ class _ShopPageState extends State<ShopPage> {
 class _ShopItemCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool purchased;
-  final bool isActiveTheme; // Добавили параметр
+  final bool isActiveItem; // Добавили параметр
   final VoidCallback onBuy;
   final VoidCallback onApply; // Заменили на чистый коллбек
 
   const _ShopItemCard({
     required this.item,
     required this.purchased,
-    required this.isActiveTheme,
+    required this.isActiveItem,
     required this.onBuy,
     required this.onApply,
   });
@@ -433,7 +448,7 @@ class _ShopItemCard extends StatelessWidget {
   }
 
   Widget _buildActionButton() {
-    if (isActiveTheme) {
+    if (isActiveItem) {
       return ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white.withOpacity(0.2),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:starplan/presentation/pages/profile_info.dart';
+import '../../core/app_settings.dart';
 import '../../data/database.dart'; // Подключаем DatabaseHelper
 
 class ProfilePage extends StatefulWidget {
@@ -21,6 +22,11 @@ class ProfilePageState extends State<ProfilePage> {
   int currentStreak = 0;
   int streakRecord = 0;
   bool _achievementsChecked = false;
+  int xpForNextLevel = 500;
+  int currentLevelXP = 0;
+  double progressFraction = 0.0;
+  String currentAvatar = 'default';
+  String currentTrophy = 'none';
 
   // Достижения
   late List<Map<String, dynamic>> achievements = [
@@ -108,33 +114,57 @@ class ProfilePageState extends State<ProfilePage> {
 
     final userId = user['id'] as int;
 
-    // 1. Загружаем статистику
-    final completed = await DatabaseHelper.instance.getCompletedTasksCount();
-    final streak = await DatabaseHelper.instance.getCurrentStreak();
-    final record = await DatabaseHelper.instance.getStreakRecord();
-
-    // 2. Загружаем актуальный баланс из БД
-    final currentStarsFromDb = user['stars'] as int;
-
-    setState(() {
-      userName = user['name'] as String;
-      userLevel = user['level'] as int;
-      userStars = currentStarsFromDb;        // актуальное значение
-      tasksCompleted = completed;
-      currentStreak = streak;
-      streakRecord = record;
-      totalXP = currentStarsFromDb * 10;
-    });
-
-    // 3. Проверяем достижения ТОЛЬКО один раз
+    //Проверяем достижения
     if (!_achievementsChecked) {
       await checkAchievements(userId);
       _achievementsChecked = true;
     }
+    //Загружаем статистику из БД
+    final completedTasks = await DatabaseHelper.instance.getCompletedTasksCount();
+    final streak = await DatabaseHelper.instance.getCurrentStreak();
+    final record = await DatabaseHelper.instance.getStreakRecord();
+    final currentStarsFromDb = await DatabaseHelper.instance.getUserStars(); // Всегда берем свежий баланс
+
+    // Загружаем настройки магазина
+    final settings = AppSettings();
+    await settings.loadSettings();
+
+    // НЕСГОРАЕМЫЙ РАСЧЕТ XP И УРОВНЯ
+    // Считаем количество разблокированных достижений
+    final unlockedAchievementsCount = achievements.where((a) => a['completed']).length;
+    // Формула опыта:
+    final calculatedXP = (completedTasks * 25) + (unlockedAchievementsCount * 100);
+    // Простая система уровней (каждые 500 XP = 1 уровень)
+    final calculatedLevel = (calculatedXP ~/ 500) + 1;
+    final xpOfCurrentLevel = (calculatedLevel - 1) * 500; // Сколько XP было на старте текущего уровня
+    final xpNeededForNext = calculatedLevel * 500; // Цель для следующего уровня
+
+    setState(() {
+      userName = user['name'] as String;
+      userStars = currentStarsFromDb;
+      tasksCompleted = completedTasks;
+      currentStreak = streak;
+      streakRecord = record;
+
+      // Обновляем данные профиля
+      currentAvatar = settings.currentAvatar;
+      currentTrophy = settings.currentTrophy;
+
+      // Обновляем данные прогресса
+      userLevel = calculatedLevel;
+      totalXP = calculatedXP;
+      xpForNextLevel = xpNeededForNext;
+      currentLevelXP = calculatedXP - xpOfCurrentLevel;
+
+      // Защита от деления на 0
+      progressFraction = (xpNeededForNext - xpOfCurrentLevel) > 0
+          ? currentLevelXP / (xpNeededForNext - xpOfCurrentLevel)
+          : 0.0;
+    });
   }
 
   Future<void> checkAchievements(int userId) async {
-    print("=== Проверка достижений ===");
+    print("Проверка достижений");
 
     int currentStars = userStars;
     bool changed = false;
@@ -240,19 +270,24 @@ class ProfileContent extends StatelessWidget {
     final currentStreak = state.currentStreak;
     final streakRecord = state.streakRecord;
     final achievements = state.achievements;
+    final currentAvatar = state.currentAvatar;
+    final currentTrophy = state.currentTrophy;
+    final xpForNextLevel = state.xpForNextLevel;
+    final progressFraction = state.progressFraction;
 
     return Column(
       children: [
-        buildTopBar(),
+        buildTopBar(context),
         const SizedBox(height: 12),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                buildHeaderCard(userName, userLevel, totalXP),
+                buildHeaderCard(context, userName, userLevel, totalXP,
+                    currentAvatar, currentTrophy, xpForNextLevel, progressFraction),
                 const SizedBox(height: 16),
-                buildStatsGrid(tasksCompleted, currentStreak, streakRecord, totalXP),
+                buildStatsGrid(context, tasksCompleted, currentStreak, streakRecord, totalXP),
                 const SizedBox(height: 16),
                 buildAchievementsSection(achievements),
                 const SizedBox(height: 24),
@@ -265,7 +300,7 @@ class ProfileContent extends StatelessWidget {
   }
 
   // Верхняя панель с меню и плюсом
-  Widget buildTopBar() {
+  Widget buildTopBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -292,17 +327,16 @@ class ProfileContent extends StatelessWidget {
   }
 
   // Большая карточка с уровнем, именем и прогрессом XP
-  Widget buildHeaderCard(String userName, int userLevel, int totalXP) {
+  Widget buildHeaderCard(BuildContext context, String userName, int userLevel,
+      int totalXP, String currentAvatar, String currentTrophy,
+      int xpForNextLevel, double progressFraction) {
+    final textColor = ProfilePalette.getTextColor(context, isHeader: true);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2343C4), Color(0xFF4C6BFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: ProfilePalette.getHeaderGradient(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,20 +353,30 @@ class ProfileContent extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFFFFC94B),
+                        color: Theme.of(context).colorScheme.primary,
                         width: 3,
                       ),
                       color: Colors.indigo.shade900,
+                      // картинка:
+                      image: currentAvatar != 'default'
+                          ? DecorationImage(
+                        image: AssetImage('assets/images/icons/avatar_$currentAvatar.png'),
+                        fit: BoxFit.cover,
+                      )
+                          : null, // Если default, картинки нет
                     ),
                     alignment: Alignment.center,
-                    child: const Text(
+                    // ТЕКСТ 'SP' ПОКАЗЫВАЕТСЯ ТОЛЬКО ЕСЛИ НЕТ КАРТИНКИ:
+                    child: currentAvatar == 'default'
+                        ? Text(
                       'SP',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: textColor,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
-                    ),
+                    )
+                        : null,
                   ),
                   Positioned(
                     right: -2,
@@ -353,13 +397,32 @@ class ProfileContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      userName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            userName,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        // ПОКАЗЫВАЕМ КУБОК, ЕСЛИ ОН ВЫБРАН
+                        if (currentTrophy != 'none') ...[
+                          const SizedBox(width: 8),
+                          Image.asset(
+                            'assets/images/icons/trophy_$currentTrophy.png',
+                            width: 20,
+                            height: 20,
+                            fit: BoxFit.contain,
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Row(
@@ -376,7 +439,7 @@ class ProfileContent extends StatelessWidget {
                 duration: Duration(microseconds: 250),
                 child: IconButton(
                   icon: Icon(Icons.edit),
-                  color: Colors.white,
+                  color: textColor,
                   onPressed: onIconPressed,
                 ),
               ),
@@ -385,10 +448,7 @@ class ProfileContent extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'До уровня ${userLevel + 1}',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 12),
           ),
           const SizedBox(height: 4),
           Stack(
@@ -400,29 +460,25 @@ class ProfileContent extends StatelessWidget {
                   color: Colors.black.withOpacity(0.45),
                 ),
               ),
+              // ДИНАМИЧЕСКАЯ ПОЛОСА ПРОГРЕССА
               FractionallySizedBox(
-                widthFactor: 2450 / 3000, // TODO: Рассчитывать на основе реального прогресса
+                widthFactor: progressFraction.clamp(0.0, 1.0), // Защита от переполнения
                 child: Container(
                   height: 10,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(999),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFC94B), Color(0xFFFF7A3C)],
-                    ),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          const Align(
+          Align(
             alignment: Alignment.centerRight,
             child: Text(
-              '2450 / 3000 XP', // TODO: Из БД
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-              ),
+              '$totalXP / $xpForNextLevel XP',
+              style: TextStyle(color: textColor.withOpacity(0.7), fontSize: 11),
             ),
           ),
         ],
@@ -449,7 +505,7 @@ class ProfileContent extends StatelessWidget {
   }
 
   // Четыре плитки: задачи, текущая серия, рекорд, всего опыта
-  static Widget buildStatsGrid(int tasksCompleted, int currentStreak, int streakRecord, int totalXP) {
+  static Widget buildStatsGrid(BuildContext context, int tasksCompleted, int currentStreak, int streakRecord, int totalXP) {
     return Row(
       children: [
         Expanded(
@@ -458,14 +514,14 @@ class ProfileContent extends StatelessWidget {
               StatCard(
                 title: 'Задач\nвыполнено',
                 value: '$tasksCompleted',
-                background: const Color(0xFF0C8A5F),
+                background: ProfilePalette.getStatColor(context, 'tasks'),
                 iconPath: 'assets/images/icons/check_tasks.png',
               ),
               const SizedBox(height: 8),
               StatCard(
                 title: 'Рекорд\nсерии',
                 value: '$streakRecord',
-                background: const Color(0xFF7A23D8),
+                background: ProfilePalette.getStatColor(context, 'record'),
                 iconPath: 'assets/images/icons/streak_record.png',
               ),
             ],
@@ -478,14 +534,14 @@ class ProfileContent extends StatelessWidget {
               StatCard(
                 title: 'Текущая\nсерия',
                 value: '$currentStreak',
-                background: const Color(0xFFB33A25),
+                background: ProfilePalette.getStatColor(context, 'streak'),
                 iconPath: 'assets/images/icons/streak_record.png',
               ),
               const SizedBox(height: 8),
               StatCard(
                 title: 'Всего\nопыта',
                 value: '$totalXP',
-                background: const Color(0xFF4230A6),
+                background: ProfilePalette.getStatColor(context, 'xp'),
                 iconPath: 'assets/images/icons/xp_icon.jpg', //заменить иконку
               ),
             ],
@@ -690,5 +746,72 @@ class AchievementCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+}
+
+class ProfilePalette {
+  // Возвращает уникальный градиент для шапки в зависимости от темы
+  static LinearGradient getHeaderGradient(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Если это OLED-тема (проверяем по вашему цвету фона из AppSettings)
+    if (theme.scaffoldBackgroundColor == const Color(0xFF0B0014)) {
+      return const LinearGradient(
+        colors: [Color(0xFF140029), Color(0xFF26004D)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+    }
+    // Если это светлая тема
+    if (theme.brightness == Brightness.light) {
+      return const LinearGradient(
+        colors: [Color(0xFFE0E6FF), Color(0xFFB3C5FF)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
+    }
+    // Дефолтная сине-голубая тема «Земля»
+    return const LinearGradient(
+      colors: [Color(0xFF2343C4), Color(0xFF4C6BFF)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+  }
+
+  // Возвращает свой цвет для каждого типа карточки статистики
+  static Color getStatColor(BuildContext context, String type) {
+    final theme = Theme.of(context);
+    final isLight = theme.brightness == Brightness.light;
+    final isOled = theme.scaffoldBackgroundColor == const Color(0xFF0B0014);
+
+    switch (type) {
+      case 'tasks': // Изначально зеленый
+        if (isLight) return const Color(0xFFE2F7EE);
+        if (isOled) return const Color(0xFF063B26);
+        return const Color(0xFF0C8A5F);
+      case 'streak': // Изначально красный
+        if (isLight) return const Color(0xFFFFEBE8);
+        if (isOled) return const Color(0xFF4D140B);
+        return const Color(0xFFB33A25);
+      case 'record': // Изначально фиолетовый
+        if (isLight) return const Color(0xFFF3E5FF);
+        if (isOled) return const Color(0xFF350B61);
+        return const Color(0xFF7A23D8);
+      case 'xp': // Изначально индиго
+        if (isLight) return const Color(0xFFE8E5FF);
+        if (isOled) return const Color(0xFF190E61);
+        return const Color(0xFF4230A6);
+      default:
+        return theme.cardColor;
+    }
+  }
+
+  // Адаптивный цвет текста внутри цветных карточек
+  static Color getTextColor(BuildContext context, {bool isHeader = false}) {
+    if (isHeader && Theme.of(context).brightness == Brightness.light) {
+      return const Color(0xFF020B3B); // Темный текст для светлой шапки
+    }
+    return Colors.white; // Белый текст для темных и OLED фонов
   }
 }

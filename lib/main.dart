@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
           title: 'StarPlan',
           debugShowCheckedModeBanner: false,
           theme: themeProvider.currentThemeData, // Передаем динамическую тему!
-          home: const RootPage(), // главный экран
+          home: RootPage(themeProvider: themeProvider), // главный экран
         );
       },
     );

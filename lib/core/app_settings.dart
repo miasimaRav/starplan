@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,13 +7,15 @@ class AppSettings {
 
   String currentTheme = 'default';
   String currentAvatar = 'default';
+  static const String _keyTrophy = 'selected_trophy';
+  String currentTrophy = 'none'; // По умолчанию кубка нет
 
   // Конфигурация стилей для каждой темы
   static final Map<String, ThemeDataConfig> themeConfigs = {
     'default': ThemeDataConfig(
       background: const Color(0xFF020B3B),
       primary: const Color(0xFFFFC94B),
-      cardColor: const Color(0xFF6508E9).withOpacity(0.92),
+      cardColor: const Color(0xFF6510A9).withOpacity(0.92),
       textColor: Colors.white,
       isLight: false,
     ),
@@ -38,6 +39,7 @@ class AppSettings {
     final prefs = await SharedPreferences.getInstance();
     currentTheme = prefs.getString(_keyTheme) ?? 'default';
     currentAvatar = prefs.getString(_keyAvatar) ?? 'default';
+    currentTrophy = prefs.getString(_keyTrophy) ?? 'none';
   }
 
   Future<void> setTheme(String themeKey) async {
@@ -51,6 +53,12 @@ class AppSettings {
     currentAvatar = avatarKey;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAvatar, avatarKey);
+  }
+
+  Future<void> setTrophy(String trophyKey) async {
+    currentTrophy = trophyKey;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTrophy, trophyKey);
   }
 }
 
@@ -70,15 +78,15 @@ class ThemeDataConfig {
     required this.isLight,
   });
 
-  // Создаем системную тему Flutter на основе наших космических цветов
+  // Создаем системную тему Flutter на основе космических цветов
   ThemeData toThemeData() {
     final colorScheme = ColorScheme(
       brightness: isLight ? Brightness.light : Brightness.dark,
       primary: primary,
-      onPrimary: isLight ? Colors.black : Colors.white,
+      onPrimary: Colors.black, // Черный текст на акцентных кнопках всегда читается лучше
       secondary: primary,
-      onSecondary: isLight ? Colors.black : Colors.white,
-      error: const Color(0xFFB71359), // AppColors.failed
+      onSecondary: Colors.black,
+      error: const Color(0xFFB71359),
       onError: Colors.white,
       surface: cardColor,
       onSurface: textColor,
@@ -102,8 +110,35 @@ class ThemeDataConfig {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primary,
-          foregroundColor: isLight ? Colors.black : Colors.white,
+          foregroundColor: Colors.black, // Жестко задаем черный текст на кнопках
         ),
+      ),
+
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: cardColor, // Фон окна берет цвет карточки текущей темы
+        headerBackgroundColor: primary, // Шапка берет золотой/бирюзовый цвет
+        headerForegroundColor: Colors.black, // Текст в шапке всегда черный для контраста
+
+        // Настройка цвета дней
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return primary; // Кружок выбранного дня
+          }
+          return Colors.transparent;
+        }),
+        dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return Colors.black; // Цифра внутри выбранного кружка
+          }
+          return textColor; // Цифры остальных дней подстраиваются под светлую/темную тему
+        }),
+
+        // Цвет текущего дня (сегодня), если он не выбран
+        todayForegroundColor: WidgetStateProperty.all(primary),
+
+        // Кнопки "ОК" и "Отмена"
+        cancelButtonStyle: TextButton.styleFrom(foregroundColor: primary),
+        confirmButtonStyle: TextButton.styleFrom(foregroundColor: primary),
       ),
     );
   }

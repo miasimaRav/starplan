@@ -20,6 +20,6 @@ class ThemeProvider extends ChangeNotifier {
 
   Future<void> changeTheme(String themeKey) async {
     await _settings.setTheme(themeKey);
-    notifyListeners(); // Этот вызов заставит ВСЕ экраны перерисоваться!
+    notifyListeners(); // Этот вызов заставит ВСЕ экраны перерисоваться
   }
 }

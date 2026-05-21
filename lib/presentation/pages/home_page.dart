@@ -179,7 +179,7 @@ class HomePageState extends State<HomePage> {
     final titleController = TextEditingController(text: isEditing ? taskToEdit.title : '');
     final descriptionController = TextEditingController(text: isEditing ? (taskToEdit.description ?? '') : '');
 
-    // Функция для пересчёта звёзд (остаётся прежней)
+    // Функция для пересчёта звёзд
     void updateStars(StateSetter setSheetState) {
       DateTime taskStart = startDate ?? selectedDate;
       DateTime taskEnd = endDate ?? taskStart;
@@ -407,11 +407,13 @@ class HomePageState extends State<HomePage> {
                           }
                         },
                         onPickEnd: () async {
-                          final picked = await pickDate(context, endDate ?? selectedDate); // Здесь лучше передавать текущую endDate, чтобы календарь открывался на ней
+                          final picked = await pickDate(context,
+                              endDate ?? selectedDate); // Здесь лучше передавать текущую endDate, чтобы календарь открывался на ней
                           if (picked != null) {
                             setSheetState(() {
                               endDate = picked;
                             });
+                            // Звезды пересчитываются сразу после выбора даты
                             updateStars(setSheetState);
                           }
                         },
@@ -560,13 +562,32 @@ class HomePageState extends State<HomePage> {
   );
 
 
-// Передаем текущую установленную дату в качестве начальной для календаря
-  Future<DateTime?> pickDate(BuildContext context, DateTime initial) {
-    return showDatePicker(
+  Future<DateTime?> pickDate(BuildContext context, DateTime initialDate) async {
+    final theme = Theme.of(context); // Получаем текущую тему приложения
+
+    return await showDatePicker(
       context: context,
-      initialDate: initial, // <-- Откроется на уже выбранном дне
+      initialDate: initialDate, // Календарь откроется на уже выбранной дате
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: theme.colorScheme.primary,    // Золотой или бирюзовый круг/шапка
+              onPrimary: Colors.black,               // Черный текст на кнопках и круге
+              surface: theme.cardColor,              // Фон самого окошка календаря
+              onSurface: theme.textTheme.bodyLarge?.color, // Цвет чисел и дней недели
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.primary, // Цвет кнопок
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
   }
 

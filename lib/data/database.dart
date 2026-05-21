@@ -26,7 +26,7 @@ class DatabaseHelper {
 
       return await openDatabase(
         path,
-        version: 8,                    // увеличиваем версию при изменении структуры
+        version: 9,                    // увеличиваем версию при изменении структуры
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       );
@@ -191,18 +191,30 @@ class DatabaseHelper {
     });
 
     batch.insert('upgrades', {
-      'name': 'Воин Света',
+      'name': 'Инициалы SP',
       'type': 'avatar',
-      'cost': 60,
-      'purchased': 0,
-      'icon_path': 'assets/images/icons/avatar_warrior.png',
+      'cost': 0,
+      'purchased': 1, // Доступен сразу
+      'icon_path': 'assets/images/icons/avatar_sp.png', // Пока любая заглушка TODO
+      'key': 'default',
     });
+
     batch.insert('upgrades', {
-      'name': 'Звёздный Маг',
+      'name': 'Космический Кот',
       'type': 'avatar',
-      'cost': 80,
+      'cost': 50,
       'purchased': 0,
-      'icon_path': 'assets/images/icons/avatar_mage.png',
+      'icon_path': 'assets/images/icons/avatar_cat.jpg',
+      'key': 'cat',
+    });
+
+    batch.insert('upgrades', {
+      'name': 'Звёздный Дракон',
+      'type': 'avatar',
+      'cost': 100,
+      'purchased': 0,
+      'icon_path': 'assets/images/icons/avatar_dragon.jpg',
+      'key': 'dragon',
     });
 
     batch.insert('upgrades', {
@@ -211,6 +223,7 @@ class DatabaseHelper {
       'cost': 30,
       'purchased': 0,
       'icon_path': 'assets/images/icons/trophy_bronze.png',
+      'key': 'bronze'
     });
     batch.insert('upgrades', {
       'name': 'Серебряный трофей',
@@ -218,6 +231,7 @@ class DatabaseHelper {
       'cost': 70,
       'purchased': 0,
       'icon_path': 'assets/images/icons/trophy_silver.png',
+      'key': 'silver'
     });
     batch.insert('upgrades', {
       'name': 'Золотой трофей',
@@ -225,6 +239,7 @@ class DatabaseHelper {
       'cost': 150,
       'purchased': 0,
       'icon_path': 'assets/images/icons/trophy_gold.png',
+      'key': 'gold'
     });
 
     await batch.commit(noResult: true);
