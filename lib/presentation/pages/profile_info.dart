@@ -58,22 +58,53 @@ class _EditProfilePageState extends State<EditProfilePage> {
       return;
     }
 
+    final emailStr = _emailController.text.trim();
+    final birthdayStr = _birthdayController.text.trim();
+
+    // 1. ПРОВЕРКА EMAIL (если поле не пустое)
+    if (emailStr.isNotEmpty) {
+      // Паттерн: строка@строка.строка (от 2 до 4 символов в домене)
+      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      if (!emailRegex.hasMatch(emailStr)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Пожалуйста, введите корректный email (например, user@mail.com)'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return; // Прерываем сохранение
+      }
+    }
+
+    // 2. ПРОВЕРКА ДАТЫ РОЖДЕНИЯ (если поле не пустое)
+    if (birthdayStr.isNotEmpty) {
+      // Паттерн: строгий формат ДД.ММ.ГГГГ с проверкой адекватности чисел (01-31.01-12.XXXX)
+      final dateRegex = RegExp(r'^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.\d{4}$');
+      if (!dateRegex.hasMatch(birthdayStr)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Пожалуйста, введите дату в формате ДД.ММ.ГГГГ'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return; // Прерываем сохранение
+      }
+    }
+
     final id = _userRow!['id'] as int;
     final name = _nameController.text.trim();
-    final birthdayStr = _birthdayController.text.trim();
-    final email = _emailController.text.trim();
     final level = int.tryParse(_levelController.text.trim()) ?? 1;
 
     await DatabaseHelper.instance.updateUser(
       id: id,
       name: name,
       birthDate: birthdayStr.isEmpty ? null : birthdayStr,
-      email: email.isEmpty ? null : email,
+      email: emailStr.isEmpty ? null : emailStr,
       level: level,
     );
 
     if (!mounted) return;
-    Navigator.pop(context); // Возвращаемся без вызова loadUserData
+    Navigator.pop(context);
   }
 
   @override
@@ -86,15 +117,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _starsController.dispose();
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/background.png'),
-            fit: BoxFit.cover,
-          ),
+        decoration: BoxDecoration(
+          // ИСПОЛЬЗУЕМ НАШ УМНЫЙ ГРАДИЕНТ ВМЕСТО КАРТИНКИ
+          gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
           child: _ProfileContent(
@@ -116,10 +146,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
 class _ProfileContent extends StatelessWidget {
   final String currentAvatar;
   final TextEditingController nameController;
-  // TextEditingController хранит текущее значение поля и позволяет:
-  // задать стартовый текст
-  // прочитать, что пользователь ввёл
-  // программно менять текст (например, после загрузки из БД).
   final TextEditingController registerDateController;
   final TextEditingController birthdayController;
   final TextEditingController emailController;
@@ -150,7 +176,8 @@ class _ProfileContent extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                _buildHeaderCard(context),
+                // Передаем nameController для отображения имени
+                _buildHeaderCard(context, nameController),
                 const SizedBox(height: 16),
                 _buildFormFields(context),
                 const SizedBox(height: 24),
@@ -166,20 +193,21 @@ class _ProfileContent extends StatelessWidget {
   // Верхняя панель
   Widget _buildTopBar(BuildContext context, VoidCallback onSave) {
     final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface; // Адаптивный цвет
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: Icon(Icons.arrow_back, color: theme.textTheme.titleLarge?.color),
+            icon: Icon(Icons.arrow_back, color: onSurface),
           ),
           Expanded(
             child: Center(
               child: Text(
                 'Редактирование профиля',
                 style: TextStyle(
-                  color: theme.textTheme.titleLarge?.color,
+                  color: onSurface,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
@@ -188,18 +216,17 @@ class _ProfileContent extends StatelessWidget {
               ),
             ),
           ),
-          // правый невидимый отступ для идеального центрирования текста
           const SizedBox(width: 48),
         ],
       ),
     );
   }
 
-  // Карточка с аватаром и уровнем (только отображение)
-  Widget _buildHeaderCard(BuildContext context) {
+  // Карточка с аватаром и уровнем (теперь с реальным именем)
+  Widget _buildHeaderCard(BuildContext context, TextEditingController nameCtrl) {
     final theme = Theme.of(context);
-    // Используем палитру для получения правильного цвета текста и градиента
     final textColor = ProfilePalette.getTextColor(context, isHeader: true);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -225,7 +252,7 @@ class _ProfileContent extends StatelessWidget {
                   color: Colors.indigo.shade900,
                   image: currentAvatar != 'default'
                       ? DecorationImage(
-                    image: AssetImage('assets/images/icons/avatar_$currentAvatar.png'),
+                    image: AssetImage('assets/images/icons/avatar_$currentAvatar.jpg'),
                     fit: BoxFit.cover,
                   )
                       : null,
@@ -249,13 +276,22 @@ class _ProfileContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            'Герой StarPlan',
-            style: TextStyle(
-              color: textColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          // Обернули текст в ValueListenableBuilder, чтобы он менялся синхронно с полем ввода!
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: nameCtrl,
+            builder: (context, value, child) {
+              return Text(
+                value.text.isNotEmpty ? value.text : 'Безымянный Герой',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              );
+            },
           ),
         ],
       ),
@@ -267,7 +303,6 @@ class _ProfileContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Передаем context в каждое текстовое поле
         _buildTextField(context, controller: nameController, label: 'Имя', maxLength: 20),
         const SizedBox(height: 15),
         _buildTextField(context, controller: registerDateController,
@@ -280,14 +315,15 @@ class _ProfileContent extends StatelessWidget {
             label: 'Email', keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 15),
         _buildTextField(context, controller: levelController,
-            label: 'Уровень', keyboardType: TextInputType.number),
+            label: 'Уровень', keyboardType: TextInputType.number, enabled: false),
         const SizedBox(height: 15),
         _buildTextField(context, controller: starsController,
             label: 'Звёзды (XP)', keyboardType: TextInputType.number, enabled: false),
       ],
     );
-
   }
+
+  // Обновленный адаптивный виджет поля ввода
   Widget _buildTextField(
       BuildContext context, {
         required TextEditingController controller,
@@ -298,35 +334,32 @@ class _ProfileContent extends StatelessWidget {
         bool enabled = true,
       }) {
     final theme = Theme.of(context);
-    final isLight = theme.brightness == Brightness.light;
-
-    // Определяем базовый цвет для текста и рамок (белый для темных тем, графитовый для светлой)
-    final baseColor = isLight ? const Color(0xFF1E272E) : Colors.white;
+    // Теперь цвет жестко привязан к системе: темный для светлой темы, белый для темной
+    final onSurface = theme.colorScheme.onSurface;
 
     return TextFormField(
       controller: controller,
       maxLength: maxLength,
       keyboardType: keyboardType,
-      style: TextStyle(color: baseColor),
+      style: TextStyle(color: onSurface),
       enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(color: baseColor),
-        hintStyle: TextStyle(color: baseColor.withOpacity(0.7)),
+        labelStyle: TextStyle(color: onSurface.withOpacity(0.8)),
+        hintStyle: TextStyle(color: onSurface.withOpacity(0.5)),
         counterText: '',
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: baseColor, width: 1),
+          borderSide: BorderSide(color: onSurface.withOpacity(0.3), width: 1),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: onSurface.withOpacity(0.1), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          // Акцентная рамка: золотая в Дефолте, бирюзовая в OLED
           borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
         ),
         filled: true,
-        // Для светлой темы делаем легкую тень, для темной белую дымку
-        fillColor: isLight
-            ? Colors.black.withOpacity(0.05)
-            : Colors.white.withOpacity(0.08),
+        fillColor: onSurface.withOpacity(0.05),
       ),
     );
   }
@@ -339,9 +372,8 @@ class _ProfileContent extends StatelessWidget {
       child: ElevatedButton(
         onPressed: onSave,
         style: ElevatedButton.styleFrom(
-          // Фон кнопки подстраивается под главную тему (Золото / Неон)
           backgroundColor: theme.colorScheme.primary,
-          foregroundColor: Colors.black,
+          foregroundColor: Colors.black, // Текст на кнопке всегда черный для контраста
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

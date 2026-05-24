@@ -28,6 +28,8 @@ class _TaskRowWidgetState extends State<TaskRowWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context); // Получаем текущую тему
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -35,14 +37,24 @@ class _TaskRowWidgetState extends State<TaskRowWidget> {
           Expanded(
             child: Text(
               widget.task.title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                // Текст берет цвет из темы (белый для темных, темно-серый для светлой)
+                color: theme.colorScheme.onSurface,
                 fontSize: 14,
               ),
             ),
           ),
           Checkbox(
             value: isCompleted,
+            // Цвет самого квадратика, когда галочка стоит (главный цвет темы)
+            activeColor: theme.colorScheme.primary,
+            // Цвет самой галочки внутри квадратика (всегда черный для отличного контраста)
+            checkColor: theme.colorScheme.onPrimary,
+            // Цвет рамки пустого квадратика
+            side: BorderSide(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              width: 2,
+            ),
             onChanged: (value) {
               if (value == null) return;
               setState(() => isCompleted = value);

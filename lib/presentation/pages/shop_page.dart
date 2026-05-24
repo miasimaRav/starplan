@@ -3,6 +3,8 @@ import '../../core/app_settings.dart';
 import '../../data/database.dart';
 import '../../logic/ThemeProvider.dart';
 
+/// Экран магазина (ShopPage), предоставляющий пользователю возможность
+/// приобретать темы оформления, аватары и награды за заработанные звёзды.
 class ShopPage extends StatefulWidget {
   final ThemeProvider themeProvider;
   const ShopPage({super.key, required this.themeProvider});
@@ -22,9 +24,7 @@ class _ShopPageState extends State<ShopPage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
     _loadSettingsAndData();
-
   }
 
   Future<void> _loadSettingsAndData() async {
@@ -32,9 +32,7 @@ class _ShopPageState extends State<ShopPage> {
     await _loadData(); // Загружаем данные БД
   }
 
-
   Future<void> _loadData() async {
-    //await DatabaseHelper.instance.initShopItems();
     final stars = await DatabaseHelper.instance.getUserStars();
     final items = await DatabaseHelper.instance.getShopItems();
 
@@ -45,11 +43,6 @@ class _ShopPageState extends State<ShopPage> {
       shopItems = items;
       isLoading = false;
     });
-
-    print("Текущий баланс из БД: $stars");
-    print("Количество товаров в БД: ${items.length}");
-
-    print("Локальный currentBalance установлен в: $currentBalance");
   }
 
   Future<void> _buyItem(Map<String, dynamic> item) async {
@@ -59,9 +52,7 @@ class _ShopPageState extends State<ShopPage> {
     final success = await DatabaseHelper.instance.purchaseUpgrade(itemId, cost);
 
     if (success) {
-      // Полностью перезагружаем данные, чтобы видеть актуальный баланс и статус purchased
-      await _loadData();
-
+      await _loadData(); // Полностью перезагружаем данные
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -74,8 +65,8 @@ class _ShopPageState extends State<ShopPage> {
         SnackBar(
           content: const Text('Недостаточно звёзд или уже куплено'),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),     //
-          behavior: SnackBarBehavior.floating,      // выглядит современнее
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
@@ -90,31 +81,40 @@ class _ShopPageState extends State<ShopPage> {
       return item['type'] == 'trophy';
     }).toList();
 
+    // Получаем текущую конфигурацию через ваш класс AppSettings
+    final themeConfig = AppSettings.themeConfigs[_settings.currentTheme]
+        ?? AppSettings.themeConfigs['default']!;
+
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        // Логика фона: картинка или градиент (убедитесь, что в AppSettings поправлен цвет проверки для космоса!)
+        decoration: themeConfig.backgroundImagePath != null
+            ? BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/images/background.png'),
+            image: AssetImage(themeConfig.backgroundImagePath!),
             fit: BoxFit.cover,
           ),
+        )
+            : BoxDecoration(
+          gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
           child: Column(
             children: [
-              _buildTopBar(),
+              _buildTopBar(themeConfig),
               const SizedBox(height: 12),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     children: [
-                      _buildBalanceCard(),
+                      _buildBalanceCard(themeConfig),
                       const SizedBox(height: 16),
-                      _buildCategoryTabs(),
+                      _buildCategoryTabs(themeConfig),
                       const SizedBox(height: 16),
-                      _buildShopItemsList(filteredItems),
+                      _buildShopItemsList(filteredItems, themeConfig),
                       const SizedBox(height: 16),
-                      _buildHintCard(),
+                      _buildHintCard(themeConfig),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -127,17 +127,17 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(ThemeDataConfig config) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Center(
               child: Text(
                 'Магазин',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: config.textColor,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
@@ -151,17 +151,13 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 
-  Widget _buildBalanceCard() {
+  Widget _buildBalanceCard(ThemeDataConfig config) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF233DD2), Color(0xFF435CFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: config.shopBalanceGradient,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -184,15 +180,15 @@ class _ShopPageState extends State<ShopPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Ваш баланс',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: config.textColor.withOpacity(0.7), fontSize: 13),
               ),
               const SizedBox(height: 4),
               Text(
                 '$currentBalance',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: config.textColor,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                 ),
@@ -200,19 +196,19 @@ class _ShopPageState extends State<ShopPage> {
             ],
           ),
           const Spacer(),
-          Icon(Icons.star, color: Colors.amber, size: 28),
+          Icon(Icons.star, color: config.primary, size: 28),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryTabs() {
+  Widget _buildCategoryTabs(ThemeDataConfig config) {
     const tabs = ['Темы', 'Аватары', 'Награды'];
 
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: config.isLight ? Colors.black.withOpacity(0.08) : Colors.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -228,14 +224,14 @@ class _ShopPageState extends State<ShopPage> {
               child: Container(
                 height: 36,
                 decoration: BoxDecoration(
-                  color: selected ? const Color(0xFFFFC94B) : Colors.transparent,
+                  color: selected ? config.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   tabs[index],
                   style: TextStyle(
-                    color: selected ? Colors.black : Colors.white,
+                    color: selected ? Colors.black : config.textColor,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -248,14 +244,14 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 
-  Widget _buildShopItemsList(List<Map<String, dynamic>> items) {
+  Widget _buildShopItemsList(List<Map<String, dynamic>> items, ThemeDataConfig config) {
     if (items.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(32),
+      return Padding(
+        padding: const EdgeInsets.all(32),
         child: Center(
           child: Text(
             'В этой категории пока пусто',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
+            style: TextStyle(color: config.textColor.withOpacity(0.7), fontSize: 16),
           ),
         ),
       );
@@ -265,7 +261,6 @@ class _ShopPageState extends State<ShopPage> {
       children: items.map((item) {
         final purchased = (item['purchased'] as int?) == 1;
 
-        // УНИВЕРСАЛЬНАЯ ПРОВЕРКА АКТИВНОСТИ:
         final isActive = (item['type'] == 'theme' && _settings.currentTheme == item['key']) ||
             (item['type'] == 'avatar' && _settings.currentAvatar == item['key']) ||
             (item['type'] == 'trophy' && _settings.currentTrophy == item['key']);
@@ -275,15 +270,17 @@ class _ShopPageState extends State<ShopPage> {
           child: _ShopItemCard(
             item: item,
             purchased: purchased,
-            isActiveItem: isActive, // Передаем результат проверки
+            isActiveItem: isActive,
+            config: config,
             onBuy: () => _buyItem(item),
             onApply: () async {
               if (item['type'] == 'theme') {
-                // widget.themeProvider даст доступ к провайдеру из конструктора
                 await widget.themeProvider.changeTheme(item['key'] ?? 'default');
+                await _settings.loadSettings();
+                setState(() {});
               } else if (item['type'] == 'avatar') {
                 await _settings.setAvatar(item['key'] ?? 'default');
-                setState(() {}); // Для аватара локального перерисовывания карточки пока достаточно
+                setState(() {});
               } else if (item['type'] == 'trophy') {
                 await _settings.setTrophy(item['key'] ?? 'none');
                 setState(() {});
@@ -302,23 +299,23 @@ class _ShopPageState extends State<ShopPage> {
     );
   }
 
-  Widget _buildHintCard() {
+  Widget _buildHintCard(ThemeDataConfig config) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.09),
+        color: config.isLight ? Colors.black.withOpacity(0.05) : Colors.white.withOpacity(0.09),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info, color: const Color(0xFFFFC94B).withOpacity(0.9), size: 20),
+          Icon(Icons.info, color: config.primary.withOpacity(0.9), size: 20),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
               'Зарабатывайте звёзды, выполняя задачи и получая достижения!',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(color: config.textColor.withOpacity(0.7), fontSize: 12),
             ),
           ),
         ],
@@ -330,14 +327,16 @@ class _ShopPageState extends State<ShopPage> {
 class _ShopItemCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool purchased;
-  final bool isActiveItem; // Добавили параметр
+  final bool isActiveItem;
+  final ThemeDataConfig config;
   final VoidCallback onBuy;
-  final VoidCallback onApply; // Заменили на чистый коллбек
+  final VoidCallback onApply;
 
   const _ShopItemCard({
     required this.item,
     required this.purchased,
     required this.isActiveItem,
+    required this.config,
     required this.onBuy,
     required this.onApply,
   });
@@ -353,7 +352,7 @@ class _ShopItemCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: const Color(0xFF2140D4).withOpacity(0.92),
+        color: config.shopCardColor,
       ),
       child: Row(
         children: [
@@ -363,16 +362,17 @@ class _ShopItemCard extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: Colors.black.withOpacity(0.25),
+              // ИСПРАВЛЕНИЕ: Используем белый полупрозрачный для темной темы, чтобы не сливалось с графитовыми карточками
+              color: config.isLight ? Colors.black.withOpacity(0.05) : Colors.white.withOpacity(0.08),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Image.asset(
                 item['icon_path'] ?? 'assets/images/icons/coin.png',
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
+                errorBuilder: (_, __, ___) => Icon(
                   Icons.star,
-                  color: Colors.amber,
+                  color: config.primary,
                   size: 32,
                 ),
               ),
@@ -389,8 +389,8 @@ class _ShopItemCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         item['name'] as String,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: config.textColor,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -419,7 +419,7 @@ class _ShopItemCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   isTheme ? 'Оформление приложения' : (item['type'] as String),
-                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  style: TextStyle(color: config.textColor.withOpacity(0.7), fontSize: 11),
                 ),
                 const Spacer(),
                 Row(
@@ -428,8 +428,8 @@ class _ShopItemCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       '$cost',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: config.textColor,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -451,12 +451,13 @@ class _ShopItemCard extends StatelessWidget {
     if (isActiveItem) {
       return ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white.withOpacity(0.2),
+          backgroundColor: config.isLight ? Colors.black.withOpacity(0.05) : Colors.white.withOpacity(0.2),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          elevation: 0,
         ),
-        onPressed: null, // Кнопка отключена, т.к. тема уже активна
-        child: const Text('Активна', style: TextStyle(fontSize: 12, color: Colors.white70)),
+        onPressed: null,
+        child: Text('Активна', style: TextStyle(fontSize: 12, color: config.textColor.withOpacity(0.5))),
       );
     }
 
@@ -474,16 +475,15 @@ class _ShopItemCard extends StatelessWidget {
 
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFFFFA22C),
+        backgroundColor: config.shopButtonColor,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       ),
       onPressed: onBuy,
-      child: const Text('Купить', style: TextStyle(fontSize: 12, color: Colors.white)),
+      child: Text('Купить', style: TextStyle(fontSize: 12, color: config.shopButtonTextColor)),
     );
   }
 
-  // Обновленные пороги редкости в соответствии с новыми ценами
   String _getRarityLabel(int cost) {
     if (cost == 0) return 'Базовый';
     if (cost <= 50) return 'Обычный';
@@ -493,9 +493,8 @@ class _ShopItemCard extends StatelessWidget {
 
   Color _getRarityColor(int cost) {
     if (cost == 0) return Colors.grey.withOpacity(0.4);
-    if (cost <= 50) return Colors.white.withOpacity(0.18);
-    if (cost <= 100) return const Color(0xFF4CC6FF);
-    return const Color(0xFFFFC94B);
+    if (cost <= 50) return config.isLight ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.18);
+    if (cost <= 100) return const Color(0xFF008bcc);
+    return const Color(0xFFcc8f00);
   }
 }
-

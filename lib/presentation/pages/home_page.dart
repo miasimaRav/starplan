@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:starplan/core/app_settings.dart';
 import 'package:starplan/core/constants/app_colors.dart';
 
 import '../../data/models/day_status.dart';
@@ -20,6 +21,7 @@ class HomePageState extends State<HomePage> {
   ViewMode viewMode = ViewMode.month;
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime selectedDate = DateTime.now();
+  ThemeData get theme => Theme.of(context);
 
   final HomeController controller = HomeController();
 
@@ -122,14 +124,13 @@ class HomePageState extends State<HomePage> {
   }
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context); // Получаем текущую тему
+
     return Scaffold(
-// Фон можно задать через контейнер с BoxDecoration
       body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/background.png'),
-            fit: BoxFit.cover,
-          ),
+        // Используем нашу новую функцию для получения нужного градиента
+        decoration: BoxDecoration(
+          gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
           child: Column(
@@ -146,7 +147,6 @@ class HomePageState extends State<HomePage> {
           ),
         ),
       ),
-
     );
   }
 
@@ -210,9 +210,9 @@ class HomePageState extends State<HomePage> {
         expand: false,
         builder: (context, scrollController) => StatefulBuilder(
           builder: (context, setSheetState) => Container(
-            decoration: const BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: Column(
               children: [
@@ -224,10 +224,10 @@ class HomePageState extends State<HomePage> {
                     children: [
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
-                        child: const Text(
+                        child: Text(
                           'Отмена',
                           style: TextStyle(
-                            color: AppColors.primary,
+                            color: theme.colorScheme.primary,
                             fontSize: 17,
                             fontWeight: FontWeight.w500,
                           ),
@@ -236,8 +236,8 @@ class HomePageState extends State<HomePage> {
                       // Динамический заголовок шапки
                       Text(
                         isEditing ? 'Редактирование' : 'Новое задание',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
                         ),
@@ -309,10 +309,10 @@ class HomePageState extends State<HomePage> {
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: const Text(
+                          child: Text(
                             'Сохранить',
                             style: TextStyle(
-                              color: AppColors.primary,
+                              color: theme.colorScheme.primary,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -335,14 +335,14 @@ class HomePageState extends State<HomePage> {
                       // Название
                       TextField(
                         controller: titleController,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
                           labelText: 'Название задачи',
-                          labelStyle: const TextStyle(color: Colors.white70),
+                          labelStyle: TextStyle(color: theme.colorScheme.onSurface),
                           errorText: titleError,
                           errorStyle: const TextStyle(color: Colors.orangeAccent),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                            borderSide: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.3)),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -350,7 +350,7 @@ class HomePageState extends State<HomePage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.06),
+                          fillColor: theme.colorScheme.onSurface.withOpacity(0.06),
                         ),
                         onChanged: (value) {
                           setSheetState(() {
@@ -364,12 +364,12 @@ class HomePageState extends State<HomePage> {
                       TextField(
                         controller: descriptionController,
                         maxLines: 3,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
                           labelText: 'Описание (необязательно)',
-                          labelStyle: const TextStyle(color: Colors.white70),
+                          labelStyle: TextStyle(color: theme.colorScheme.onSurface),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                            borderSide: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.3)),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -377,7 +377,7 @@ class HomePageState extends State<HomePage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.06),
+                          fillColor: theme.colorScheme.onSurface.withOpacity(0.06),
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -424,18 +424,18 @@ class HomePageState extends State<HomePage> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
+                          color: theme.colorScheme.onSurface.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.star, color: AppColors.primary, size: 28),
+                            Icon(Icons.star, color: theme.colorScheme.primary, size: 28),
                             const SizedBox(width: 12),
                             Text(
                               '$calculatedStars звёзд',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -470,8 +470,8 @@ class HomePageState extends State<HomePage> {
         const SizedBox(width: 12),
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
@@ -500,7 +500,7 @@ class HomePageState extends State<HomePage> {
             Container(
               width: 2,
               height: 48,
-              color: Colors.white.withOpacity(0.4),
+              color: theme.colorScheme.onSurface.withOpacity(0.4),
               margin: const EdgeInsets.symmetric(horizontal: 16),
             ),
             Expanded(
@@ -519,16 +519,16 @@ class HomePageState extends State<HomePage> {
   Widget buildDifficultyDropdown(int value, void Function(int?) onChanged) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.08),
+      color: theme.colorScheme.onSurface.withOpacity(0.08),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withOpacity(0.2)),
+      border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.2)),
     ),
     child: DropdownButtonHideUnderline(
       child: DropdownButton<int>(
         value: value,
         isExpanded: true,
-        dropdownColor: const Color(0xFF020C42),
-        style: const TextStyle(color: Colors.white, fontSize: 16),
+        dropdownColor: theme.cardColor,
+        style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
         items: const [
           DropdownMenuItem(value: 1, child: Text('1 - Очень легко')),
           DropdownMenuItem(value: 2, child: Text('2 - Легко')),
@@ -545,9 +545,9 @@ class HomePageState extends State<HomePage> {
   Widget buildDateButton({required String label, required VoidCallback onTap}) => Container(
     height: 56,
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.08),
+      color: theme.colorScheme.onSurface.withOpacity(0.08),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withOpacity(0.2)),
+      border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.2)),
     ),
     child: Material(
       color: Colors.transparent,
@@ -574,14 +574,14 @@ class HomePageState extends State<HomePage> {
         return Theme(
           data: theme.copyWith(
             colorScheme: theme.colorScheme.copyWith(
-              primary: theme.colorScheme.primary,    // Золотой или бирюзовый круг/шапка
-              onPrimary: Colors.black,               // Черный текст на кнопках и круге
+              primary: AppColors.primary,
+              onPrimary: theme.colorScheme.onPrimary,               // Черный текст на кнопках и круге
               surface: theme.cardColor,              // Фон самого окошка календаря
               onSurface: theme.textTheme.bodyLarge?.color, // Цвет чисел и дней недели
             ),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.primary, // Цвет кнопок
+                foregroundColor: AppColors.primary, // Цвет кнопок
               ),
             ),
           ),
@@ -613,8 +613,8 @@ class HomePageState extends State<HomePage> {
                 onTap: pickMonthAndYear,
                 child: Text(
                   monthTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
@@ -635,14 +635,14 @@ class HomePageState extends State<HomePage> {
                 onPressed: () {
                   _showRulesDialog(context);
                 },
-                icon: const Icon(Icons.help_outline, color: Colors.white70),
+                icon: Icon(Icons.help_outline, color: theme.colorScheme.onSurface),
                 tooltip: 'Правила начисления звёзд',
               ),
               IconButton(
                 onPressed: () {
                   addTasksBottomSheet();
                 },
-                icon: const Icon(Icons.add, color: Colors.white),
+                icon: Icon(Icons.add, color: theme.colorScheme.onSurface),
               ),
             ],
           ),
@@ -657,17 +657,17 @@ class HomePageState extends State<HomePage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E2E), // Темный фон
+          backgroundColor: theme.cardColor, // Темный фон
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.star, color: Colors.amber, size: 28),
-              SizedBox(width: 10),
+              const Icon(Icons.star, color: Colors.amber, size: 28),
+              const SizedBox(width: 10),
               Text(
                 'Правила начисления',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -676,9 +676,9 @@ class HomePageState extends State<HomePage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Выполняйте задачи, зарабатывайте звёзды и открывайте новые достижения!',
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                  style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
                 ),
                 const SizedBox(height: 20),
 
@@ -713,7 +713,7 @@ class HomePageState extends State<HomePage> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.amber,
+                foregroundColor: theme.colorScheme.primary,
               ),
               child: const Text(
                 'Понятно',
@@ -743,8 +743,8 @@ class HomePageState extends State<HomePage> {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -752,8 +752,8 @@ class HomePageState extends State<HomePage> {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: const TextStyle(
-                  color: Colors.white60,
+                style:  TextStyle(
+                  color: theme.colorScheme.onSurface,
                   fontSize: 15,
                   height: 1.3,
                 ),
@@ -791,7 +791,7 @@ class HomePageState extends State<HomePage> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: theme.colorScheme.onSurface.withOpacity(0.06),
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(4),
@@ -846,6 +846,7 @@ class HomePageState extends State<HomePage> {
 
 
   Widget buildSegmentButton(String text, bool selected, VoidCallback onTap) {
+    final theme = Theme.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -853,7 +854,7 @@ class HomePageState extends State<HomePage> {
           height: 36,
           decoration: BoxDecoration(
             color: selected
-                ? AppColors.primary
+                ? theme.colorScheme.primary
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
@@ -861,7 +862,7 @@ class HomePageState extends State<HomePage> {
           child: Text(
             text,
             style: TextStyle(
-              color: selected ? Colors.black : Colors.white,
+              color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -929,23 +930,23 @@ class HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  icon: Icon(Icons.chevron_left, color: theme.colorScheme.onSurface),
                   onPressed: () => _changeWeek(-1),
                 ),
                 Column(
                   children: [
                     Text(
                       "${weekDays.first.day} - ${weekDays.last.day} ",
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       "${monthNames[selectedDate.month]} ${selectedDate.year}",
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                       ),
@@ -953,7 +954,7 @@ class HomePageState extends State<HomePage> {
                   ],
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right, color: Colors.white),
+                  icon: Icon(Icons.chevron_right, color: theme.colorScheme.onSurface),
                   onPressed: () => _changeWeek(1),
                 ),
               ],
@@ -991,7 +992,7 @@ class HomePageState extends State<HomePage> {
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: theme.colorScheme.onSurface.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: _dayTasks.isEmpty
@@ -1054,7 +1055,7 @@ class HomePageState extends State<HomePage> {
 
     final status = days[date];
 
-    Color bgColor = Colors.white.withOpacity(0.08);
+    Color bgColor = theme.colorScheme.onSurface.withOpacity(0.08);
     if (isSelected) bgColor = AppColors.primary;
     else if (isToday) bgColor = AppColors.white;
 
@@ -1070,7 +1071,7 @@ class HomePageState extends State<HomePage> {
           Text(
             ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][date.weekday - 1],
             style: TextStyle(
-              color: isSelected ? Colors.black : Colors.white70,
+              color: isSelected ? Colors.black : theme.colorScheme.onSurface,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
@@ -1079,7 +1080,7 @@ class HomePageState extends State<HomePage> {
           Text(
             '${date.day}',
             style: TextStyle(
-              color: isSelected ? Colors.black : Colors.white,
+              color: isSelected ? Colors.black : theme.colorScheme.onSurface,
               fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
@@ -1090,7 +1091,7 @@ class HomePageState extends State<HomePage> {
               status.type == DayType.warning ? Icons.warning_amber :
               Icons.error_outline,
               size: 14,
-              color: isSelected ? Colors.black87 : Colors.white70,
+              color: isSelected ? Colors.black87 : theme.colorScheme.onSurface,
             ),
         ],
       ),
@@ -1118,7 +1119,7 @@ class HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.chevron_left, color: Colors.white, size: 32),
+                  icon: Icon(Icons.chevron_left, color: theme.colorScheme.onSurface, size: 32),
                   onPressed: () => _changeDay(-1),
                 ),
 
@@ -1128,16 +1129,16 @@ class HomePageState extends State<HomePage> {
                     children: [
                       Text(
                         "${selectedDate.day}",
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
                         "${monthNames[selectedDate.month]} ${selectedDate.year}",
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1147,7 +1148,7 @@ class HomePageState extends State<HomePage> {
                 ),
 
                 IconButton(
-                  icon: const Icon(Icons.chevron_right, color: Colors.white, size: 32),
+                  icon: Icon(Icons.chevron_right, color: theme.colorScheme.onSurface, size: 32),
                   onPressed: () => _changeDay(1),
                 ),
               ],
@@ -1169,7 +1170,7 @@ class HomePageState extends State<HomePage> {
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: theme.colorScheme.onSurface.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: _dayTasks.isEmpty
@@ -1264,7 +1265,7 @@ class HomePageState extends State<HomePage> {
                 child: Text(
                   e,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1299,13 +1300,13 @@ class HomePageState extends State<HomePage> {
         bgColor = AppColors.warning;
         break;
       default:
-        bgColor = Colors.white.withOpacity(0.08);
+        bgColor = theme.colorScheme.onSurface.withOpacity(0.08);
     }
 
     if (isSelected) {
-      bgColor = Colors.white.withOpacity(0.3);
+      bgColor = theme.colorScheme.onSurface.withOpacity(0.3);
     } else if (isToday) {
-      bgColor = Colors.white.withOpacity(0.15);
+      bgColor = theme.colorScheme.onSurface.withOpacity(0.15);
     }
 
     return GestureDetector(
@@ -1330,7 +1331,7 @@ class HomePageState extends State<HomePage> {
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? theme.colorScheme.onSurface : Colors.transparent,
             width: 1.5,
           ),
         ),
@@ -1340,8 +1341,8 @@ class HomePageState extends State<HomePage> {
           children: [
             Text(
               '${date.day}',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1355,7 +1356,7 @@ class HomePageState extends State<HomePage> {
                   if (status.type == DayType.failed)
                     const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
                   if (status.type == DayType.warning)
-                    const Icon(Icons.error_outline, color: Colors.white, size: 16),
+                    Icon(Icons.error_outline, color: theme.colorScheme.onSurface, size: 16),
                 ],
               ),
           ],
@@ -1385,9 +1386,9 @@ class HomePageState extends State<HomePage> {
             return StatefulBuilder(
               builder: (context, setBottomSheetState) {
               return Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                decoration: BoxDecoration(
+                  color: theme.scaffoldBackgroundColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 padding: const EdgeInsets.all(4),
                 child: Column(
@@ -1405,11 +1406,11 @@ class HomePageState extends State<HomePage> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             'Задачи на день',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: theme.colorScheme.onSurface,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1495,9 +1496,12 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<String?> _showActionMenu(BuildContext context, Task task) {
+    final theme = Theme.of(context); // Получаем текущую тему
+
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: const Color(0xFF1E1E2E),
+      // Используем цвет карточки для фона шторки (он адаптируется под каждую тему)
+      backgroundColor: theme.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1512,27 +1516,40 @@ class HomePageState extends State<HomePage> {
                   task.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              const Divider(color: Colors.white12, height: 1),
+              // Адаптивный разделитель
+              Divider(
+                color: theme.colorScheme.onSurface.withOpacity(0.12),
+                height: 1,
+              ),
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.amber),
-                title: const Text('Редактировать', style: TextStyle(color: Colors.white)),
+                // Иконка теперь красится в цвет темы (золотой, бирюзовый или желтый)
+                leading: Icon(Icons.edit, color: theme.colorScheme.primary),
+                title: Text(
+                  'Редактировать',
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
                 onTap: () {
-                  // Закрываем меню действий и возвращаем строку 'edit'
                   Navigator.pop(context, 'edit');
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.redAccent),
-                title: const Text('Удалить', style: TextStyle(color: Colors.redAccent)),
+                // Используем настроенный в вашей теме AppColors.failed через theme.colorScheme.error
+                leading: Icon(Icons.delete, color: theme.colorScheme.error),
+                title: Text(
+                  'Удалить',
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 onTap: () {
-                  // Закрываем меню действий и возвращаем строку 'delete'
                   Navigator.pop(context, 'delete');
                 },
               ),
@@ -1556,9 +1573,9 @@ class HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$done/$total задач выполнено', // TODO: подгружать количество задач из бд
-            style: const TextStyle(
-              color: Colors.white,
+            '$done/$total задач выполнено',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -1567,7 +1584,7 @@ class HomePageState extends State<HomePage> {
           Text(
             '${(percent * 100).round()}%',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
               fontSize: 12,
             ),
           ),
@@ -1577,7 +1594,7 @@ class HomePageState extends State<HomePage> {
             child: LinearProgressIndicator(
               value: percent,
               minHeight: 8,
-              backgroundColor: Colors.white.withOpacity(0.1),
+              backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
               valueColor: const AlwaysStoppedAnimation<Color>(
                   AppColors.primary),
             ),
@@ -1637,7 +1654,7 @@ class HomePageState extends State<HomePage> {
       title = 'В этом месяце пока нет активных дней. Время планировать!';
       subtitle = 'Каждая большая цель начинается с первой задачи.';
       cardIcon = Icons.calendar_today_rounded;
-      iconColor = Colors.white70;
+      iconColor = theme.colorScheme.onSurface;
     } else if (completedDays == 0) {
       // Сценарий 2: Задачи добавлены (например, в начале недели), но ещё не завершены
       title = 'Запланировано дней с задачами: $activeDays. Отличный старт!';
@@ -1665,9 +1682,9 @@ class HomePageState extends State<HomePage> {
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.09),
+          color: theme.colorScheme.onSurface.withOpacity(0.09),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white),
+          border: Border.all(color: theme.colorScheme.onSurface),
           boxShadow: const [
             BoxShadow(color: Colors.black26),
           ],
@@ -1683,8 +1700,8 @@ class HomePageState extends State<HomePage> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1692,8 +1709,8 @@ class HomePageState extends State<HomePage> {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
                       fontSize: 12,
                     ),
                   ),

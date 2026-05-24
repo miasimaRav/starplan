@@ -165,7 +165,7 @@ class DatabaseHelper {
       'name': 'Станция "Земля"',
       'type': 'theme',
       'cost': 0,
-      'purchased': 1, // <--- Сразу доступна для применения!
+      'purchased': 1,
       'icon_path': 'assets/images/icons/theme_earth.png',
       'key': 'default',
     });
@@ -174,7 +174,7 @@ class DatabaseHelper {
     batch.insert('upgrades', {
       'name': 'Сверхновая',
       'type': 'theme',
-      'cost': 40,
+      'cost': 70,
       'purchased': 0,
       'icon_path': 'assets/images/icons/theme_supernova.png',
       'key': 'supernova',
@@ -184,7 +184,7 @@ class DatabaseHelper {
     batch.insert('upgrades', {
       'name': 'Глубокий космос',
       'type': 'theme',
-      'cost': 90,
+      'cost': 140,
       'purchased': 0,
       'icon_path': 'assets/images/icons/theme_space.png',
       'key': 'space',
@@ -795,6 +795,22 @@ class DatabaseHelper {
       whereArgs: [userId, achievementKey],
     );
     return result.isNotEmpty;
+  }
+
+  // Получить дату разблокировки конкретного достижения
+  Future<String?> getAchievementUnlockDate(int userId, String achievementKey) async {
+    final db = await database;
+    final result = await db.query(
+      'user_achievements',
+      columns: ['date_completed'], // нужна только дата
+      where: 'user_id = ? AND achievement_key = ? AND completed = 1',
+      whereArgs: [userId, achievementKey],
+    );
+
+    if (result.isNotEmpty && result.first['date_completed'] != null) {
+      return result.first['date_completed'] as String;
+    }
+    return null;
   }
 
 }

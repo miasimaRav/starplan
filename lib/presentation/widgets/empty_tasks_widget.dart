@@ -5,22 +5,26 @@ class EmptyTasksWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    final theme = Theme.of(context); // Получаем текущую тему
+
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             "На этот день задач пока нет",
             style: TextStyle(
-              color: Colors.white70,
+              // Используем цвет текста из темы с прозрачностью 70%
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
               fontSize: 18,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             "Нажмите «+» чтобы добавить",
             style: TextStyle(
-              color: Colors.white54,
+              // Используем цвет текста из темы с прозрачностью 54%
+              color: theme.colorScheme.onSurface.withOpacity(0.54),
               fontSize: 14,
             ),
           ),
