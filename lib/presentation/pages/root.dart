@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/profile_info.dart';
-import 'package:starplan/presentation/pages/profile_page.dart';
-import 'package:starplan/presentation/pages/shop_page.dart';
+import 'package:StarPlan/presentation/pages/profile_info.dart';
+import 'package:StarPlan/presentation/pages/profile_page.dart';
+import 'package:StarPlan/presentation/pages/shop_page.dart';
 
 import '../../logic/ThemeProvider.dart';
 import 'home_page.dart';

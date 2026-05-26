@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/core/app_settings.dart';
-import 'package:starplan/core/constants/app_colors.dart';
+import 'package:StarPlan/core/app_settings.dart';
+import 'package:StarPlan/core/constants/app_colors.dart';
 
 import '../../data/models/day_status.dart';
 import '../../data/models/task_model.dart';

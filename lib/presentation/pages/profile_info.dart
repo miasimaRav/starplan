@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/profile_page.dart';
+import 'package:StarPlan/presentation/pages/profile_page.dart';
 
 import '../../core/app_settings.dart';
 import '../../data/database.dart';
@@ -68,7 +68,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!emailRegex.hasMatch(emailStr)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Пожалуйста, введите корректный email (например, user@mail.com)'),
+            content: Text('Пожалуйста, введите корректный email (например, user@mail.com)',
+              style: TextStyle(
+              fontSize: 14,
+                color: Colors.white,
+            ),),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -83,7 +87,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!dateRegex.hasMatch(birthdayStr)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Пожалуйста, введите дату в формате ДД.ММ.ГГГГ'),
+            content: Text('Пожалуйста, введите дату в формате ДД.ММ.ГГГГ',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white,
+              ),
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );

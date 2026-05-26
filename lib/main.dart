@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/home_page.dart';
-import 'package:starplan/presentation/pages/root.dart';
+import 'package:StarPlan/presentation/pages/home_page.dart';
+import 'package:StarPlan/presentation/pages/root.dart';
 
 import 'logic/ThemeProvider.dart';
 

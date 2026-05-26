@@ -38,7 +38,7 @@ class AppSettings {
 
       shopCardColor: Colors.white,
       shopBalanceGradient: const LinearGradient(
-        colors: [Color(0xFF9FB8E0), Color(0xFF7CAEE9)],
+        colors: [Color(0xFFE0E6FF), Color(0xFFB3C5FF)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
@@ -59,6 +59,7 @@ class AppSettings {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
+
       backgroundImagePath: null,
       shopButtonColor: const Color(0xFF00F5D4),
       shopButtonTextColor: Colors.black,

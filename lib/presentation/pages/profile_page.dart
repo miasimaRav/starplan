@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/profile_info.dart';
+import 'package:StarPlan/presentation/pages/profile_info.dart';
 import '../../core/app_settings.dart';
 import '../../data/database.dart'; // Подключаем DatabaseHelper
 
@@ -34,7 +34,7 @@ class ProfilePageState extends State<ProfilePage> {
       'title': 'Первый шаг',
       'subtitle': 'Выполните первую задачу',
       'condition': () => tasksCompleted >= 1,
-      'starsReward': 50,
+      'starsReward': 20,
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_first_step.png',
@@ -44,7 +44,7 @@ class ProfilePageState extends State<ProfilePage> {
       'title': 'Огненная полоса',
       'subtitle': 'Достигните 7 дней подряд',
       'condition': () => currentStreak >= 7,
-      'starsReward': 100,
+      'starsReward': 20,
       'completed': false,
       'date': '--',
       'iconPath': 'assets/images/icons/achievement_streak7.png',
@@ -93,7 +93,8 @@ class ProfilePageState extends State<ProfilePage> {
     {
       'title': 'Легенда',
       'subtitle': 'Откройте все награды',
-      'condition': (List<Map<String, dynamic>> ach) => ach.every((a) => a['completed']),
+      'condition': (List<Map<String, dynamic>> ach) =>
+          ach.where((a) => a['key'] != 'legend').every((a) => a['completed'] == true),
       'starsReward': 1000,
       'completed': false,
       'date': '--',
@@ -118,107 +119,77 @@ class ProfilePageState extends State<ProfilePage> {
   Future<void> loadUserData() async {
     final user = await DatabaseHelper.instance.getCurrentUser();
     if (user == null) return;
-
     final userId = user['id'] as int;
-
-//Достаем строку даты регистрации
+    // Достаем и форматируем дату регистрации
     final regRaw = user['registration_date'] as String? ?? '';
     String formattedRegDate = '--.--.----';
-    // Парсим и переводим её в привычный формат ДД.ММ.ГГГГ
     if (regRaw.isNotEmpty) {
       final dateTime = DateTime.tryParse(regRaw);
       if (dateTime != null) {
-        formattedRegDate =
-        '${dateTime.day.toString().padLeft(2, '0')}.'
-            '${dateTime.month.toString().padLeft(2, '0')}.'
-            '${dateTime.year}';
+        formattedRegDate = _formatDate(dateTime);
       }
     }
-
-    //Проверяем достижения
-    if (!_achievementsChecked) {
-      await checkAchievements(userId, formattedRegDate);
-      _achievementsChecked = true;
-    }
-    //Загружаем статистику из БД
-    final completedTasks = await DatabaseHelper.instance.getCompletedTasksCount();
-    final streak = await DatabaseHelper.instance.getCurrentStreak();
-    final record = await DatabaseHelper.instance.getStreakRecord();
-    final currentStarsFromDb = await DatabaseHelper.instance.getUserStars(); // Всегда берем свежий баланс
-
+    // загружаем статистику из БД
+    tasksCompleted = await DatabaseHelper.instance.getCompletedTasksCount();
+    currentStreak = await DatabaseHelper.instance.getCurrentStreak();
+    streakRecord = await DatabaseHelper.instance.getStreakRecord();
+    // проверяем достижения (они будут использовать актуальные цифры)
+    await checkAchievements(userId, formattedRegDate);
+    // Загружаем баланс звезд ПОСЛЕ проверки (вдруг нам только что начислили бонус)
+    final currentStarsFromDb = await DatabaseHelper.instance.getUserStars();
     // Загружаем настройки магазина
     final settings = AppSettings();
     await settings.loadSettings();
-
-    // РАСЧЕТ XP И УРОВНЯ
-    // Считаем количество разблокированных достижений
+    // Расчет XP и уровней
     final unlockedAchievementsCount = achievements.where((a) => a['completed']).length;
-    // Формула опыта:
-    final calculatedXP = (completedTasks * 25) + (unlockedAchievementsCount * 100);
-    // Простая система уровней (каждые 500 XP = 1 уровень)
+    final calculatedXP = (tasksCompleted * 25) + (unlockedAchievementsCount * 100);
     final calculatedLevel = (calculatedXP ~/ 500) + 1;
-    final xpOfCurrentLevel = (calculatedLevel - 1) * 500; // Сколько XP было на старте текущего уровня
-    final xpNeededForNext = calculatedLevel * 500; // Цель для следующего уровня
-
+    final xpOfCurrentLevel = (calculatedLevel - 1) * 500;
+    final xpNeededForNext = calculatedLevel * 500;
+    // Обновляем интерфейс
     setState(() {
       userName = user['name'] as String;
       userStars = currentStarsFromDb;
-      tasksCompleted = completedTasks;
-      currentStreak = streak;
-      streakRecord = record;
 
-      // Обновляем данные профиля
       currentAvatar = settings.currentAvatar;
       currentTrophy = settings.currentTrophy;
 
-      // Обновляем данные прогресса
       userLevel = calculatedLevel;
       totalXP = calculatedXP;
       xpForNextLevel = xpNeededForNext;
       currentLevelXP = calculatedXP - xpOfCurrentLevel;
 
-      // Защита от деления на 0
       progressFraction = (xpNeededForNext - xpOfCurrentLevel) > 0
           ? currentLevelXP / (xpNeededForNext - xpOfCurrentLevel)
           : 0.0;
-
-      final noviceIndex = achievements.indexWhere((a) => a['key'] == 'beginner');
-      if (noviceIndex != -1) {
-        achievements[noviceIndex]['date'] = formattedRegDate; // Подставляем отформатированную дату
-        achievements[noviceIndex]['completed'] = true;       // Новичок всегда выполнен
-      }
     });
   }
 
   Future<void> checkAchievements(int userId, String formattedRegDate) async {
-    print("Проверка достижений");
-
-    int currentStars = userStars;
-    bool changed = false;
-
-    // Сначала ставим "Новичка" (ему не нужна проверка в БД, он дается за регистрацию)
+    // Сначала ставим "Новичка"
     final noviceIndex = achievements.indexWhere((a) => a['key'] == 'beginner');
     if (noviceIndex != -1) {
       achievements[noviceIndex]['date'] = formattedRegDate;
       achievements[noviceIndex]['completed'] = true;
     }
 
+    // Проходим по остальным достижениям
     for (var i = 0; i < achievements.length; i++) {
       final ach = achievements[i];
       final key = ach['key'] as String;
 
       if (key == 'beginner') continue;
-      final unlockDateStr = await DatabaseHelper.instance.getAchievementUnlockDate(userId, key);
 
-      // Если достижение уже есть в БД
+      // Проверяем, было ли оно уже открыто ранее (смотрим в БД)
+      final unlockDateStr = await DatabaseHelper.instance.getAchievementUnlockDate(userId, key);
       if (unlockDateStr != null) {
         ach['completed'] = true;
         final parsedDate = DateTime.tryParse(unlockDateStr);
         ach['date'] = parsedDate != null ? _formatDate(parsedDate) : unlockDateStr;
-        continue;
+        continue; // Идем к следующему
       }
 
-      // Если в БД его нет, проверяем условие
+      // Если в БД его еще нет, проверяем выполнил ли пользователь условие сейчас
       bool conditionMet = false;
       try {
         final condition = ach['condition'];
@@ -232,31 +203,34 @@ class ProfilePageState extends State<ProfilePage> {
         continue;
       }
 
-      // Если условие выполнено сейчас
+      // Если условие выполнено именно при этом заходе в профиль
       if (conditionMet) {
-        print("Выполнено достижение: ${ach['title']} (+${ach['starsReward']} ★)");
-
         final reward = ach['starsReward'] as int;
         final now = DateTime.now();
 
+        // Записываем разблокировку и начисляем звезды в БД
         await DatabaseHelper.instance.unlockAchievement(
-          userId: userId,
-          achievementKey: key,
-          starsReward: reward
+            userId: userId,
+            achievementKey: key,
+            starsReward: reward
         );
 
-        currentStars += reward;
+        // Обновляем локальный список
         ach['completed'] = true;
         ach['date'] = _formatDate(now);
-        changed = true;
-      }
-    }
 
-    if (changed) {
-      setState(() {
-        userStars = currentStars;
-        // XP пересчитается в конце loadUserData
-      });
+        // Показываем радостное уведомление пользователю
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Достижение получено: ${ach['title']}! +$reward ★'),
+              backgroundColor: Colors.amber.shade800,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
     }
   }
 
