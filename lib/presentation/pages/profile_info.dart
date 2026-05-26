@@ -1,8 +1,7 @@
+import 'package:StarPlan/core/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:StarPlan/presentation/pages/profile_page.dart';
-
-import '../../core/app_settings.dart';
-import '../../data/database.dart';
+import '../../logic/edit_profile_controller.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -12,118 +11,40 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  String currentAvatar = 'default';
-  Map<String, dynamic>? _userRow;
-
-  final _nameController = TextEditingController();
-  final _registerDateController = TextEditingController();
-  final _birthdayController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _levelController = TextEditingController();
-  final _starsController = TextEditingController();
+  late final EditProfileController _controller;
 
   @override
   void initState() {
     super.initState();
-    loadUser();
-  }
+    _controller = EditProfileController();
 
-  Future<void> loadUser() async {
-    final row = await DatabaseHelper.instance.getCurrentUser();
-    if (row == null) return;
-
-    final reg = row['registration_date'] as String;
-    final regDate = DateTime.tryParse(reg);
-
-    // Загружаем аватар
-    final settings = AppSettings();
-    await settings.loadSettings();
-    setState(() {
-      _userRow = row;
-      currentAvatar = settings.currentAvatar;
-      _nameController.text = row['name'] as String? ?? 'User';
-      _registerDateController.text = regDate != null
-          ? '${regDate.day.toString().padLeft(2, '0')}.${regDate.month.toString().padLeft(2, '0')}.${regDate.year}'
-          : '';
-      _birthdayController.text = row['birth_date'] as String? ?? '';
-      _emailController.text = row['email'] as String? ?? '';
-      _levelController.text = (row['level'] ?? 1).toString();
-      _starsController.text = (row['stars'] ?? 100).toString();
-    });
-  }
-
-  Future<void> _onSave() async {
-    if (_userRow == null) {
-      Navigator.pop(context);
-      return;
-    }
-
-    final emailStr = _emailController.text.trim();
-    final birthdayStr = _birthdayController.text.trim();
-
-    // 1. ПРОВЕРКА EMAIL (если поле не пустое)
-    if (emailStr.isNotEmpty) {
-      // Паттерн: строка@строка.строка (от 2 до 4 символов в домене)
-      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-      if (!emailRegex.hasMatch(emailStr)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пожалуйста, введите корректный email (например, user@mail.com)',
-              style: TextStyle(
-              fontSize: 14,
-                color: Colors.white,
-            ),),
-            backgroundColor: Colors.redAccent,
+    // Подписываемся на ошибку валидации от контроллера
+    _controller.onError = (message) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(fontSize: 14, color: Colors.white),
           ),
-        );
-        return; // Прерываем сохранение
-      }
-    }
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    };
 
-    // 2. ПРОВЕРКА ДАТЫ РОЖДЕНИЯ (если поле не пустое)
-    if (birthdayStr.isNotEmpty) {
-      // Паттерн: строгий формат ДД.ММ.ГГГГ с проверкой адекватности чисел (01-31.01-12.XXXX)
-      final dateRegex = RegExp(r'^(0[1-9]|[12][0-9]|3[01])\.(0[1-9]|1[012])\.\d{4}$');
-      if (!dateRegex.hasMatch(birthdayStr)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пожалуйста, введите дату в формате ДД.ММ.ГГГГ',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        return; // Прерываем сохранение
-      }
-    }
+    // Подписываемся на успешное сохранение
+    _controller.onSuccess = () {
+      if (!mounted) return;
+      Navigator.pop(context); // Возвращаемся на предыдущий экран
+    };
 
-    final id = _userRow!['id'] as int;
-    final name = _nameController.text.trim();
-    final level = int.tryParse(_levelController.text.trim()) ?? 1;
-
-    await DatabaseHelper.instance.updateUser(
-      id: id,
-      name: name,
-      birthDate: birthdayStr.isEmpty ? null : birthdayStr,
-      email: emailStr.isEmpty ? null : emailStr,
-      level: level,
-    );
-
-    if (!mounted) return;
-    Navigator.pop(context);
+    // Запускаем асинхронную загрузку
+    _controller.loadUser();
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _registerDateController.dispose();
-    _birthdayController.dispose();
-    _emailController.dispose();
-    _levelController.dispose();
-    _starsController.dispose();
+    _controller.dispose(); // Контроллер сам удалит все свои текстовые поля
     super.dispose();
   }
 
@@ -132,19 +53,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          // ИСПОЛЬЗУЕМ НАШ УМНЫЙ ГРАДИЕНТ ВМЕСТО КАРТИНКИ
           gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
-          child: _ProfileContent(
-            currentAvatar: currentAvatar,
-            nameController: _nameController,
-            registerDateController: _registerDateController,
-            birthdayController: _birthdayController,
-            emailController: _emailController,
-            levelController: _levelController,
-            starsController: _starsController,
-            onSave: _onSave,
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, child) {
+              // Пока данные грузятся, показываем индикатор, чтобы избежать пустых полей
+              if (_controller.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return _ProfileContent(controller: _controller);
+            },
           ),
         ),
       ),
@@ -153,44 +73,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
 }
 
 class _ProfileContent extends StatelessWidget {
-  final String currentAvatar;
-  final TextEditingController nameController;
-  final TextEditingController registerDateController;
-  final TextEditingController birthdayController;
-  final TextEditingController emailController;
-  final TextEditingController levelController;
-  final TextEditingController starsController;
-  final VoidCallback onSave;
+  final EditProfileController controller;
 
-  const _ProfileContent({
-    super.key,
-    required this.currentAvatar,
-    required this.nameController,
-    required this.registerDateController,
-    required this.birthdayController,
-    required this.emailController,
-    required this.levelController,
-    required this.starsController,
-    required this.onSave,
-  });
+  const _ProfileContent({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildTopBar(context, onSave),
+        _buildTopBar(context, controller.saveProfile),
         const SizedBox(height: 12),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                // Передаем nameController для отображения имени
-                _buildHeaderCard(context, nameController),
+                _buildHeaderCard(context, controller),
                 const SizedBox(height: 16),
-                _buildFormFields(context),
+                _buildFormFields(context, controller),
                 const SizedBox(height: 24),
-                _buildSaveButton(context, onSave),
+                _buildSaveButton(context, controller.saveProfile),
               ],
             ),
           ),
@@ -202,7 +104,7 @@ class _ProfileContent extends StatelessWidget {
   // Верхняя панель
   Widget _buildTopBar(BuildContext context, VoidCallback onSave) {
     final theme = Theme.of(context);
-    final onSurface = theme.colorScheme.onSurface; // Адаптивный цвет
+    final onSurface = theme.colorScheme.onSurface;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
@@ -231,8 +133,8 @@ class _ProfileContent extends StatelessWidget {
     );
   }
 
-  // Карточка с аватаром и уровнем (теперь с реальным именем)
-  Widget _buildHeaderCard(BuildContext context, TextEditingController nameCtrl) {
+  // Карточка с аватаром и уровнем
+  Widget _buildHeaderCard(BuildContext context, EditProfileController controller) {
     final theme = Theme.of(context);
     final textColor = ProfilePalette.getTextColor(context, isHeader: true);
 
@@ -259,15 +161,15 @@ class _ProfileContent extends StatelessWidget {
                     width: 3,
                   ),
                   color: Colors.indigo.shade900,
-                  image: currentAvatar != 'default'
+                  image: controller.currentAvatar != 'default'
                       ? DecorationImage(
-                    image: AssetImage('assets/images/icons/avatar_$currentAvatar.jpg'),
+                    image: AssetImage('assets/images/icons/avatar_${controller.currentAvatar}.jpg'),
                     fit: BoxFit.cover,
                   )
                       : null,
                 ),
                 alignment: Alignment.center,
-                child: currentAvatar == 'default'
+                child: controller.currentAvatar == 'default'
                     ? Text(
                   'SP',
                   style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w700),
@@ -285,9 +187,9 @@ class _ProfileContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          // Обернули текст в ValueListenableBuilder, чтобы он менялся синхронно с полем ввода!
+          // Слушатель поля имени для мгновенного обновления текста заголовка
           ValueListenableBuilder<TextEditingValue>(
-            valueListenable: nameCtrl,
+            valueListenable: controller.nameController,
             builder: (context, value, child) {
               return Text(
                 value.text.isNotEmpty ? value.text : 'Безымянный Герой',
@@ -308,31 +210,31 @@ class _ProfileContent extends StatelessWidget {
   }
 
   // Поля формы
-  Widget _buildFormFields(BuildContext context) {
+  Widget _buildFormFields(BuildContext context, EditProfileController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildTextField(context, controller: nameController, label: 'Имя', maxLength: 20),
+        _buildTextField(context, controller: controller.nameController, label: 'Имя', maxLength: 20),
         const SizedBox(height: 15),
-        _buildTextField(context, controller: registerDateController,
+        _buildTextField(context, controller: controller.registerDateController,
             label: 'Дата регистрации', hint: 'дд.мм.гггг', enabled: false),
         const SizedBox(height: 15),
-        _buildTextField(context, controller: birthdayController,
+        _buildTextField(context, controller: controller.birthdayController,
             label: 'Дата рождения', hint: 'дд.мм.гггг'),
         const SizedBox(height: 15),
-        _buildTextField(context, controller: emailController,
+        _buildTextField(context, controller: controller.emailController,
             label: 'Email', keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 15),
-        _buildTextField(context, controller: levelController,
+        _buildTextField(context, controller: controller.levelController,
             label: 'Уровень', keyboardType: TextInputType.number, enabled: false),
         const SizedBox(height: 15),
-        _buildTextField(context, controller: starsController,
+        _buildTextField(context, controller: controller.starsController,
             label: 'Звёзды (XP)', keyboardType: TextInputType.number, enabled: false),
       ],
     );
   }
 
-  // Обновленный адаптивный виджет поля ввода
+  // Адаптивный виджет поля ввода
   Widget _buildTextField(
       BuildContext context, {
         required TextEditingController controller,
@@ -343,7 +245,6 @@ class _ProfileContent extends StatelessWidget {
         bool enabled = true,
       }) {
     final theme = Theme.of(context);
-    // Теперь цвет жестко привязан к системе: темный для светлой темы, белый для темной
     final onSurface = theme.colorScheme.onSurface;
 
     return TextFormField(
@@ -382,7 +283,7 @@ class _ProfileContent extends StatelessWidget {
         onPressed: onSave,
         style: ElevatedButton.styleFrom(
           backgroundColor: theme.colorScheme.primary,
-          foregroundColor: Colors.black, // Текст на кнопке всегда черный для контраста
+          foregroundColor: Colors.black,
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

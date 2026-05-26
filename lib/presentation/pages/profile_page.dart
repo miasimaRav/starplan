@@ -1,237 +1,46 @@
+import 'package:StarPlan/core/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:StarPlan/presentation/pages/profile_info.dart';
-import '../../core/app_settings.dart';
-import '../../data/database.dart'; // Подключаем DatabaseHelper
+import '../../logic/profile_controller.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => ProfilePageState();
+  State<ProfilePage> createState() => _ProfilePageState();
 }
 
-class ProfilePageState extends State<ProfilePage> {
-  bool isEditProfile = true;
-
-  // Данные пользователя из БД
-  String userName = 'User';
-  int userLevel = 1;
-  int userStars = 100;
-  int totalXP = 0;
-  int tasksCompleted = 0;
-  int currentStreak = 0;
-  int streakRecord = 0;
-  bool _achievementsChecked = false;
-  int xpForNextLevel = 500;
-  int currentLevelXP = 0;
-  double progressFraction = 0.0;
-  String currentAvatar = 'default';
-  String currentTrophy = 'none';
-
-  // Достижения
-  late List<Map<String, dynamic>> achievements = [
-    {
-      'title': 'Первый шаг',
-      'subtitle': 'Выполните первую задачу',
-      'condition': () => tasksCompleted >= 1,
-      'starsReward': 20,
-      'completed': false,
-      'date': '--',
-      'iconPath': 'assets/images/icons/achievement_first_step.png',
-      'key': 'first_step'
-    },
-    {
-      'title': 'Огненная полоса',
-      'subtitle': 'Достигните 7 дней подряд',
-      'condition': () => currentStreak >= 7,
-      'starsReward': 20,
-      'completed': false,
-      'date': '--',
-      'iconPath': 'assets/images/icons/achievement_streak7.png',
-      'key': 'fire_way'
-    },
-    {
-      'title': 'Мастер задач',
-      'subtitle': 'Выполните 100 задач',
-      'condition': () => tasksCompleted >= 100,
-      'starsReward': 200,
-      'completed': false,
-      'date': '--',
-      'iconPath': 'assets/images/icons/achievement_100tasks.png',
-      'key': 'task_master'
-    },
-    {
-      'title': 'Новичок',
-      'subtitle': 'Зарегистрируйтесь в приложении',
-      'condition': () => false,
-      'starsReward': 10,
-      'completed': true,
-      'date': '--.--.----',
-      'iconPath': 'assets/images/icons/achievement_novice.png',
-      'key': 'beginner'
-    },
-    {
-      'title': 'Стойкий',
-      'subtitle': 'Достигните 30 дней серии',
-      'condition': () => currentStreak >= 30,
-      'starsReward': 300,
-      'completed': false,
-      'date': '--',
-      'iconPath': 'assets/images/icons/achievement_persistent.png',
-      'key': 'strong'
-    },
-    {
-      'title': 'Эксперт',
-      'subtitle': 'Выполните 500 задач',
-      'condition': () => tasksCompleted >= 500,
-      'starsReward': 500,
-      'completed': false,
-      'date': '--',
-      'iconPath': 'assets/images/icons/achievement_expert.png',
-      'key': 'expert'
-    },
-    {
-      'title': 'Легенда',
-      'subtitle': 'Откройте все награды',
-      'condition': (List<Map<String, dynamic>> ach) =>
-          ach.where((a) => a['key'] != 'legend').every((a) => a['completed'] == true),
-      'starsReward': 1000,
-      'completed': false,
-      'date': '--',
-      'iconPath': 'assets/images/icons/achievement_legend.png',
-      'key': 'legend'
-    },
-  ];
+class _ProfilePageState extends State<ProfilePage> {
+  // Инициализируем контроллер
+  late final ProfileController _controller;
 
   @override
   void initState() {
     super.initState();
-    loadUserData();
-  }
+    _controller = ProfileController();
 
-  // Вспомогательный метод для красивого форматирования дат
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.'
-        '${date.month.toString().padLeft(2, '0')}.'
-        '${date.year}';
-  }
-
-  Future<void> loadUserData() async {
-    final user = await DatabaseHelper.instance.getCurrentUser();
-    if (user == null) return;
-    final userId = user['id'] as int;
-    // Достаем и форматируем дату регистрации
-    final regRaw = user['registration_date'] as String? ?? '';
-    String formattedRegDate = '--.--.----';
-    if (regRaw.isNotEmpty) {
-      final dateTime = DateTime.tryParse(regRaw);
-      if (dateTime != null) {
-        formattedRegDate = _formatDate(dateTime);
-      }
-    }
-    // загружаем статистику из БД
-    tasksCompleted = await DatabaseHelper.instance.getCompletedTasksCount();
-    currentStreak = await DatabaseHelper.instance.getCurrentStreak();
-    streakRecord = await DatabaseHelper.instance.getStreakRecord();
-    // проверяем достижения (они будут использовать актуальные цифры)
-    await checkAchievements(userId, formattedRegDate);
-    // Загружаем баланс звезд ПОСЛЕ проверки (вдруг нам только что начислили бонус)
-    final currentStarsFromDb = await DatabaseHelper.instance.getUserStars();
-    // Загружаем настройки магазина
-    final settings = AppSettings();
-    await settings.loadSettings();
-    // Расчет XP и уровней
-    final unlockedAchievementsCount = achievements.where((a) => a['completed']).length;
-    final calculatedXP = (tasksCompleted * 25) + (unlockedAchievementsCount * 100);
-    final calculatedLevel = (calculatedXP ~/ 500) + 1;
-    final xpOfCurrentLevel = (calculatedLevel - 1) * 500;
-    final xpNeededForNext = calculatedLevel * 500;
-    // Обновляем интерфейс
-    setState(() {
-      userName = user['name'] as String;
-      userStars = currentStarsFromDb;
-
-      currentAvatar = settings.currentAvatar;
-      currentTrophy = settings.currentTrophy;
-
-      userLevel = calculatedLevel;
-      totalXP = calculatedXP;
-      xpForNextLevel = xpNeededForNext;
-      currentLevelXP = calculatedXP - xpOfCurrentLevel;
-
-      progressFraction = (xpNeededForNext - xpOfCurrentLevel) > 0
-          ? currentLevelXP / (xpNeededForNext - xpOfCurrentLevel)
-          : 0.0;
-    });
-  }
-
-  Future<void> checkAchievements(int userId, String formattedRegDate) async {
-    // Сначала ставим "Новичка"
-    final noviceIndex = achievements.indexWhere((a) => a['key'] == 'beginner');
-    if (noviceIndex != -1) {
-      achievements[noviceIndex]['date'] = formattedRegDate;
-      achievements[noviceIndex]['completed'] = true;
-    }
-
-    // Проходим по остальным достижениям
-    for (var i = 0; i < achievements.length; i++) {
-      final ach = achievements[i];
-      final key = ach['key'] as String;
-
-      if (key == 'beginner') continue;
-
-      // Проверяем, было ли оно уже открыто ранее (смотрим в БД)
-      final unlockDateStr = await DatabaseHelper.instance.getAchievementUnlockDate(userId, key);
-      if (unlockDateStr != null) {
-        ach['completed'] = true;
-        final parsedDate = DateTime.tryParse(unlockDateStr);
-        ach['date'] = parsedDate != null ? _formatDate(parsedDate) : unlockDateStr;
-        continue; // Идем к следующему
-      }
-
-      // Если в БД его еще нет, проверяем выполнил ли пользователь условие сейчас
-      bool conditionMet = false;
-      try {
-        final condition = ach['condition'];
-        if (condition is bool Function()) {
-          conditionMet = condition();
-        } else if (condition is bool Function(List<Map<String, dynamic>>)) {
-          conditionMet = condition(achievements);
-        }
-      } catch (e) {
-        print("Ошибка при проверке достижения $key: $e");
-        continue;
-      }
-
-      // Если условие выполнено именно при этом заходе в профиль
-      if (conditionMet) {
-        final reward = ach['starsReward'] as int;
-        final now = DateTime.now();
-
-        // Записываем разблокировку и начисляем звезды в БД
-        await DatabaseHelper.instance.unlockAchievement(
-            userId: userId,
-            achievementKey: key,
-            starsReward: reward
+    // Слушаем события от контроллера (для показа всплывающих уведомлений)
+    _controller.onAchievementUnlocked = (title, reward) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🏆 Достижение получено: $title! +$reward ★'),
+            backgroundColor: Colors.amber.shade800,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
         );
-
-        // Обновляем локальный список
-        ach['completed'] = true;
-        ach['date'] = _formatDate(now);
-
-        // Показываем радостное уведомление пользователю
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Достижение получено: ${ach['title']}! +$reward ★'),
-              backgroundColor: Colors.amber.shade800,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
       }
-    }
+    };
+
+    // Запускаем загрузку данных
+    _controller.loadUserData();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose(); // Обязательно освобождаем память
+    super.dispose();
   }
 
   void onIconPressed() {
@@ -239,7 +48,7 @@ class ProfilePageState extends State<ProfilePage> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const EditProfilePage()),
-    ).then((_) => loadUserData()); // Обновить после редактирования
+    ).then((_) => _controller.loadUserData()); // Обновить после редактирования
   }
 
   @override
@@ -250,7 +59,16 @@ class ProfilePageState extends State<ProfilePage> {
           gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
-          child: ProfileContent(onIconPressed: onIconPressed),
+          // ListenableBuilder автоматически перерисовывает UI, когда в контроллере вызывается notifyListeners()
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, child) {
+              return ProfileContent(
+                controller: _controller,
+                onIconPressed: onIconPressed,
+              );
+            },
+          ),
         ),
       ),
     );
@@ -258,28 +76,18 @@ class ProfilePageState extends State<ProfilePage> {
 }
 
 class ProfileContent extends StatelessWidget {
+  final ProfileController controller;
   final VoidCallback onIconPressed;
 
   const ProfileContent({
+    super.key,
+    required this.controller,
     required this.onIconPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Доступ к состоянию для данных
-    final state = context.findAncestorStateOfType<ProfilePageState>()!;
-    final userName = state.userName;
-    final userLevel = state.userLevel;
-    final totalXP = state.totalXP;
-    final tasksCompleted = state.tasksCompleted;
-    final currentStreak = state.currentStreak;
-    final streakRecord = state.streakRecord;
-    final achievements = state.achievements;
-    final currentAvatar = state.currentAvatar;
-    final currentTrophy = state.currentTrophy;
-    final xpForNextLevel = state.xpForNextLevel;
-    final progressFraction = state.progressFraction;
-
+    // Теперь мы берем все данные напрямую из контроллера, код стал чище!
     return Column(
       children: [
         buildTopBar(context),
@@ -289,12 +97,26 @@ class ProfileContent extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                buildHeaderCard(context, userName, userLevel, totalXP,
-                    currentAvatar, currentTrophy, xpForNextLevel, progressFraction),
+                buildHeaderCard(
+                  context,
+                  controller.userName,
+                  controller.userLevel,
+                  controller.totalXP,
+                  controller.currentAvatar,
+                  controller.currentTrophy,
+                  controller.xpForNextLevel,
+                  controller.progressFraction,
+                ),
                 const SizedBox(height: 16),
-                buildStatsGrid(context, tasksCompleted, currentStreak, streakRecord, totalXP),
+                buildStatsGrid(
+                  context,
+                  controller.tasksCompleted,
+                  controller.currentStreak,
+                  controller.streakRecord,
+                  controller.totalXP,
+                ),
                 const SizedBox(height: 16),
-                buildAchievementsSection(context, achievements),
+                buildAchievementsSection(context, controller.achievements),
                 const SizedBox(height: 24),
               ],
             ),
@@ -321,8 +143,7 @@ class ProfileContent extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis, // если экран совсем узкий,
-                // текст аккуратно сократится
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -362,16 +183,14 @@ class ProfileContent extends StatelessWidget {
                         width: 3,
                       ),
                       color: Colors.indigo.shade900,
-                      // картинка:
                       image: currentAvatar != 'default'
                           ? DecorationImage(
                         image: AssetImage('assets/images/icons/avatar_$currentAvatar.jpg'),
                         fit: BoxFit.cover,
                       )
-                          : null, // Если default, картинки нет
+                          : null,
                     ),
                     alignment: Alignment.center,
-                    // ТЕКСТ 'SP' ПОКАЗЫВАЕТСЯ ТОЛЬКО ЕСЛИ НЕТ КАРТИНКИ:
                     child: currentAvatar == 'default'
                         ? Text(
                       'SP',
@@ -417,7 +236,6 @@ class ProfileContent extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        // ПОКАЗЫВАЕМ КУБОК, ЕСЛИ ОН ВЫБРАН
                         if (currentTrophy != 'none') ...[
                           const SizedBox(width: 8),
                           Image.asset(
@@ -441,9 +259,9 @@ class ProfileContent extends StatelessWidget {
                 ),
               ),
               AnimatedSwitcher(
-                duration: Duration(microseconds: 250),
+                duration: const Duration(microseconds: 250),
                 child: IconButton(
-                  icon: Icon(Icons.edit),
+                  icon: const Icon(Icons.edit),
                   color: textColor,
                   onPressed: onIconPressed,
                 ),
@@ -465,9 +283,8 @@ class ProfileContent extends StatelessWidget {
                   color: Colors.black.withOpacity(0.45),
                 ),
               ),
-              // ДИНАМИЧЕСКАЯ ПОЛОСА ПРОГРЕССА
               FractionallySizedBox(
-                widthFactor: progressFraction.clamp(0.0, 1.0), // Защита от переполнения
+                widthFactor: progressFraction.clamp(0.0, 1.0),
                 child: Container(
                   height: 10,
                   decoration: BoxDecoration(
@@ -509,7 +326,6 @@ class ProfileContent extends StatelessWidget {
     );
   }
 
-  // Четыре плитки: задачи, текущая серия, рекорд, всего опыта
   static Widget buildStatsGrid(BuildContext context, int tasksCompleted, int currentStreak, int streakRecord, int totalXP) {
     return Row(
       children: [
@@ -556,7 +372,6 @@ class ProfileContent extends StatelessWidget {
     );
   }
 
-  // Блок с достижениями
   static Widget buildAchievementsSection(BuildContext context, List<Map<String, dynamic>> achievements) {
     final theme = Theme.of(context);
     final completedCount = achievements.where((a) => a['completed']).length;
@@ -622,6 +437,7 @@ class StatCard extends StatelessWidget {
   final String iconPath;
 
   const StatCard({
+    super.key,
     required this.title,
     required this.value,
     required this.background,
@@ -631,7 +447,6 @@ class StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Используем onSurface (темный для светлой темы, светлый для темной)
     final textColor = theme.colorScheme.onSurface;
     return Container(
       height: 90,
@@ -682,7 +497,8 @@ class AchievementCard extends StatelessWidget {
   final String iconPath;
   final bool locked;
 
-  const AchievementCard({super.key,
+  const AchievementCard({
+    super.key,
     required this.title,
     required this.subtitle,
     required this.dateText,
@@ -706,7 +522,7 @@ class AchievementCard extends StatelessWidget {
         border: Border.all(
           color: locked
               ? onSurface.withOpacity(0.15)
-              : theme.colorScheme.primary.withOpacity(0.6), // Рамка цвета темы
+              : theme.colorScheme.primary.withOpacity(0.6),
           width: 1,
         ),
       ),
@@ -725,7 +541,7 @@ class AchievementCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    color: onSurface, // Адаптивный текст
+                    color: onSurface,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -751,7 +567,7 @@ class AchievementCard extends StatelessWidget {
           Text(
             dateText,
             style: TextStyle(
-              color: theme.colorScheme.primary, // Дата цветом темы (а не только желтым)
+              color: theme.colorScheme.primary,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
@@ -760,15 +576,11 @@ class AchievementCard extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class ProfilePalette {
-  // Возвращает уникальный градиент для шапки в зависимости от темы
   static LinearGradient getHeaderGradient(BuildContext context) {
     final theme = Theme.of(context);
-
-    // Если это OLED-тема (проверяем по вашему цвету фона из AppSettings)
     if (theme.scaffoldBackgroundColor == const Color(0xFF0B0014)) {
       return const LinearGradient(
         colors: [Color(0xFF140029), Color(0xFF26004D)],
@@ -776,7 +588,6 @@ class ProfilePalette {
         end: Alignment.bottomRight,
       );
     }
-    // Если это светлая тема
     if (theme.brightness == Brightness.light) {
       return const LinearGradient(
         colors: [Color(0xFFE0E6FF), Color(0xFFB3C5FF)],
@@ -784,7 +595,6 @@ class ProfilePalette {
         end: Alignment.bottomRight,
       );
     }
-    // Дефолтная сине-голубая тема «Земля»
     return const LinearGradient(
       colors: [Color(0xFF2343C4), Color(0xFF4C6BFF)],
       begin: Alignment.topLeft,
@@ -792,26 +602,25 @@ class ProfilePalette {
     );
   }
 
-  // Возвращает свой цвет для каждого типа карточки статистики
   static Color getStatColor(BuildContext context, String type) {
     final theme = Theme.of(context);
     final isLight = theme.brightness == Brightness.light;
     final isOled = theme.scaffoldBackgroundColor == const Color(0xFF0B0014);
 
     switch (type) {
-      case 'tasks': // Изначально зеленый
+      case 'tasks':
         if (isLight) return const Color(0xFFE2F7EE);
         if (isOled) return const Color(0xFF063B26);
         return const Color(0xFF0C8A5F);
-      case 'streak': // Изначально красный
+      case 'streak':
         if (isLight) return const Color(0xFFFFEBE8);
         if (isOled) return const Color(0xFF4D140B);
         return const Color(0xFFB33A25);
-      case 'record': // Изначально фиолетовый
+      case 'record':
         if (isLight) return const Color(0xFFF3E5FF);
         if (isOled) return const Color(0xFF350B61);
         return const Color(0xFF7A23D8);
-      case 'xp': // Изначально индиго
+      case 'xp':
         if (isLight) return const Color(0xFFE8E5FF);
         if (isOled) return const Color(0xFF190E61);
         return const Color(0xFF4230A6);
@@ -820,11 +629,10 @@ class ProfilePalette {
     }
   }
 
-  // Адаптивный цвет текста внутри цветных карточек
   static Color getTextColor(BuildContext context, {bool isHeader = false}) {
     if (isHeader && Theme.of(context).brightness == Brightness.light) {
-      return const Color(0xFF020B3B); // Темный текст для светлой шапки
+      return const Color(0xFF020B3B);
     }
-    return Theme.of(context).colorScheme.onSurface; // Белый текст для темных и OLED фонов
+    return Theme.of(context).colorScheme.onSurface;
   }
 }

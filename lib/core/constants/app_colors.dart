@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+///Этот класс хранит цвета, которые никогда или почти никогда не меняются в зависимости от темы
 class AppColors {
   static const primary = Color(0xFFFFC94B);
   static const background = Color(0xFF020B3B);

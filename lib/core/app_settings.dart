@@ -42,7 +42,7 @@ class AppSettings {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      backgroundImagePath: null, // Если null, используем ваш backgroundGradient
+      backgroundImagePath: null, // Если null, используем backgroundGradient
       shopButtonColor: const Color(0xFFFFB300),
       shopButtonTextColor: Colors.black,
     ),
@@ -122,6 +122,8 @@ class ThemeDataConfig {
   });
 
   // Создаем системную тему на основе космических цветов
+  // Метод-переводчик, берет данные из ThemeDataConfig и перекладывает их в
+  // систему (ThemeData), чтобы Flutter смог их прочитать
   ThemeData toThemeData() {
     final colorScheme = ColorScheme(
       brightness: isLight ? Brightness.light : Brightness.dark,
@@ -187,7 +189,8 @@ class ThemeDataConfig {
   }
 }
 
-extension AppThemeGradients on ThemeData {
+extension AppThemeGradients on ThemeData { //системный класс, зашитый глубоко в ядро Flutter
+  // его используют все встроенные виджеты
   // Добавляем новое свойство прямо в ThemeData
   LinearGradient get backgroundGradient {
     final isLight = brightness == Brightness.light;
@@ -204,7 +207,7 @@ extension AppThemeGradients on ThemeData {
       );
     }
 
-    // 2. Тема "Космос" (OLED) — сверяемся с вашим цветом из ProfilePalette
+    // 2. Тема "Космос" (OLED) — сверяемся с цветом из ProfilePalette
     if (scaffoldBackgroundColor == const Color(0xFF000000)) {
       return const LinearGradient(
         begin: Alignment.topCenter,
