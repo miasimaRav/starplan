@@ -1,4 +1,4 @@
-name: starplan
+name: StarPlan
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -33,6 +33,7 @@ dependencies:
 
   sqflite: ^2.3.0
   path: ^1.9.0
+  shared_preferences: ^2.3.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -53,6 +54,8 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   path: 1.9.1
   path_provider: ^2.1.5
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -98,3 +101,21 @@ flutter:
   assets:
     - assets/images/icons/
     - assets/images/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  # Этот путь используется для iOS и старых версий Android:
+  image_path: "assets/images/logo_splash.jpg"
+
+  # для современных Android (8.0+):
+  adaptive_icon_background: "#020b3b"
+  adaptive_icon_foreground: "assets/images/app_icon.png" # звезда
+
+flutter_native_splash:
+  color: "#020b3b" # Заливаем весь экран этим цветом
+  image: "assets/images/app_icon.png" # прозрачная звезда по центру
+
+  android_12:
+    image: "assets/images/app_icon.png"
+    color: "#020b3b"

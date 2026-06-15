@@ -1,19 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/home_page.dart';
-import 'package:starplan/presentation/pages/root.dart';
+import 'package:StarPlan/presentation/pages/home_page.dart';
+import 'package:StarPlan/presentation/pages/root.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'logic/ThemeProvider.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final themeProvider = ThemeProvider();
+  await themeProvider.init(); // Сначала загружаем тему из настроек
+
+  runApp(MyApp(themeProvider: themeProvider));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ThemeProvider themeProvider;
+  const MyApp({super.key, required this.themeProvider});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: const RootPage(),
+    return ListenableBuilder(
+      listenable: themeProvider,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'StarPlan',
+          debugShowCheckedModeBanner: false,
+          theme: themeProvider.currentThemeData, // Передаем динамическую тему!
+          home: RootPage(themeProvider: themeProvider), // главный экран
+        );
+      },
     );
   }
 }

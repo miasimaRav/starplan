@@ -1,10 +1,9 @@
+import 'package:StarPlan/core/app_settings.dart';
 import 'package:flutter/material.dart';
-
-import '../../data/database.dart';
+import 'package:StarPlan/presentation/pages/profile_page.dart';
+import '../../logic/edit_profile_controller.dart';
 
 class EditProfilePage extends StatefulWidget {
-
-
   const EditProfilePage({super.key});
 
   @override
@@ -12,106 +11,60 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-
-  Map<String, dynamic>? _userRow;
-
-  // контроллеры для полей
-  final _nameController = TextEditingController();
-  final _registerDateController = TextEditingController();
-  final _birthdayController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _levelController = TextEditingController();
-  final _starsController = TextEditingController();
+  late final EditProfileController _controller;
 
   @override
   void initState() {
     super.initState();
-    loadUser();
+    _controller = EditProfileController();
+
+    // Подписываемся на ошибку валидации от контроллера
+    _controller.onError = (message) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            style: const TextStyle(fontSize: 14, color: Colors.white),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    };
+
+    // Подписываемся на успешное сохранение
+    _controller.onSuccess = () {
+      if (!mounted) return;
+      Navigator.pop(context); // Возвращаемся на предыдущий экран
+    };
+
+    // Запускаем асинхронную загрузку
+    _controller.loadUser();
   }
-
-
-  Future<void> loadUser() async {
-    final dbHelper = DatabaseHelper.instance;
-    final row = await dbHelper.getCurrentUser();
-    if (row == null) return;
-
-    // преобразуем дату регистрации в удобный формат
-    final reg = row['registration_date'] as String;
-    final regDate = DateTime.tryParse(reg);
-
-    setState(() {
-      _userRow = row;
-      _nameController.text = row['name'] as String? ?? 'User';
-      _registerDateController.text = regDate != null
-          ? '${regDate.day.toString().padLeft(2, '0')}.'
-          '${regDate.month.toString().padLeft(2, '0')}.'
-          '${regDate.year}'
-          : '';
-      _birthdayController.text = row['birth_date'] as String? ?? '';
-      _emailController.text = row['email'] as String? ?? '';
-      _levelController.text = (row['level'] ?? 1).toString();
-      _starsController.text = (row['stars'] ?? 100).toString();
-    });
-  }
-
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _registerDateController.dispose();
-    _birthdayController.dispose();
-    _emailController.dispose();
-    _levelController.dispose();
-    _starsController.dispose();
+    _controller.dispose(); // Контроллер сам удалит все свои текстовые поля
     super.dispose();
-  }
-
-  Future<void> _onSave() async {
-    if (_userRow == null) {
-      Navigator.pop(context);
-      return;
-    }
-
-    final id = _userRow!['id'] as int;
-    final name = _nameController.text.trim();
-    final birthdayStr = _birthdayController.text.trim();
-    final email = _emailController.text.trim();
-    final level = int.tryParse(_levelController.text.trim()) ?? 1;
-
-    final dbHelper = DatabaseHelper.instance;
-    await dbHelper.updateUser(
-      id: id,
-      name: name,
-      birthDate: birthdayStr,
-      email: email,
-      level: level,
-    );
-
-    if (!mounted) return;
-    // mounted это булевое свойство у State (и с недавних версий также у BuildContext),
-    // которое показывает, «живёт» ли сейчас stateful‑виджет в дереве виджетов
-    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/background.png'),
-            fit: BoxFit.cover,
-          ),
+        decoration: BoxDecoration(
+          gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
-          child: _ProfileContent(
-            nameController: _nameController,
-            registerDateController: _registerDateController,
-            birthdayController: _birthdayController,
-            emailController: _emailController,
-            levelController: _levelController,
-            starsController: _starsController,
-            onSave: _onSave,
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, child) {
+              // Пока данные грузятся, показываем индикатор, чтобы избежать пустых полей
+              if (_controller.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return _ProfileContent(controller: _controller);
+            },
           ),
         ),
       ),
@@ -120,45 +73,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
 }
 
 class _ProfileContent extends StatelessWidget {
-  final TextEditingController nameController;
-  // TextEditingController хранит текущее значение поля и позволяет:
-  // задать стартовый текст
-  // прочитать, что пользователь ввёл
-  // программно менять текст (например, после загрузки из БД).
-  final TextEditingController registerDateController;
-  final TextEditingController birthdayController;
-  final TextEditingController emailController;
-  final TextEditingController levelController;
-  final TextEditingController starsController;
-  final VoidCallback onSave;
+  final EditProfileController controller;
 
-  const _ProfileContent({
-    super.key,
-    required this.nameController,
-    required this.registerDateController,
-    required this.birthdayController,
-    required this.emailController,
-    required this.levelController,
-    required this.starsController,
-    required this.onSave,
-  });
+  const _ProfileContent({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildTopBar(context, onSave),
+        _buildTopBar(context, controller.saveProfile),
         const SizedBox(height: 12),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                _buildHeaderCard(),
+                _buildHeaderCard(context, controller),
                 const SizedBox(height: 16),
-                _buildFormFields(),
+                _buildFormFields(context, controller),
                 const SizedBox(height: 24),
-                _buildSaveButton(onSave),
+                _buildSaveButton(context, controller.saveProfile),
               ],
             ),
           ),
@@ -169,43 +103,47 @@ class _ProfileContent extends StatelessWidget {
 
   // Верхняя панель
   Widget _buildTopBar(BuildContext context, VoidCallback onSave) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(Icons.arrow_back, color: onSurface),
           ),
-          const Expanded(
+          Expanded(
             child: Center(
               child: Text(
                 'Редактирование профиля',
                 style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
+                  color: onSurface,
+                  fontSize: 20,
                   fontWeight: FontWeight.w600,
                 ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
               ),
             ),
           ),
+          const SizedBox(width: 48),
         ],
       ),
     );
   }
 
-  // Карточка с аватаром и уровнем (только отображение)
-  Widget _buildHeaderCard() {
+  // Карточка с аватаром и уровнем
+  Widget _buildHeaderCard(BuildContext context, EditProfileController controller) {
+    final theme = Theme.of(context);
+    final textColor = ProfilePalette.getTextColor(context, isHeader: true);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2343C4), Color(0xFF4C6BFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: ProfilePalette.getHeaderGradient(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -219,20 +157,24 @@ class _ProfileContent extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: const Color(0xFFFFC94B),
+                    color: theme.colorScheme.primary,
                     width: 3,
                   ),
                   color: Colors.indigo.shade900,
+                  image: controller.currentAvatar != 'default'
+                      ? DecorationImage(
+                    image: AssetImage('assets/images/icons/avatar_${controller.currentAvatar}.jpg'),
+                    fit: BoxFit.cover,
+                  )
+                      : null,
                 ),
                 alignment: Alignment.center,
-                child: const Text(
+                child: controller.currentAvatar == 'default'
+                    ? Text(
                   'SP',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                  style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w700),
+                )
+                    : null,
               ),
               SizedBox(
                 width: 35,
@@ -245,13 +187,22 @@ class _ProfileContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Герой StarPlan',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          // Слушатель поля имени для мгновенного обновления текста заголовка
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller.nameController,
+            builder: (context, value, child) {
+              return Text(
+                value.text.isNotEmpty ? value.text : 'Безымянный Герой',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              );
+            },
           ),
         ],
       ),
@@ -259,90 +210,79 @@ class _ProfileContent extends StatelessWidget {
   }
 
   // Поля формы
-  Widget _buildFormFields() {
+  Widget _buildFormFields(BuildContext context, EditProfileController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildTextField(
-          controller: nameController,
-          label: 'Имя',
-          maxLength: 20,
-        ),
+        _buildTextField(context, controller: controller.nameController, label: 'Имя', maxLength: 20),
         const SizedBox(height: 15),
-        _buildTextField(
-          controller: registerDateController,
-          label: 'Дата регистрации',
-          hint: 'дд.мм.гггг',
-          enabled: false,
-        ),
+        _buildTextField(context, controller: controller.registerDateController,
+            label: 'Дата регистрации', hint: 'дд.мм.гггг', enabled: false),
         const SizedBox(height: 15),
-        _buildTextField(
-          controller: birthdayController,
-          label: 'Дата рождения',
-          hint: 'дд.мм.гггг',
-        ),
+        _buildTextField(context, controller: controller.birthdayController,
+            label: 'Дата рождения', hint: 'дд.мм.гггг'),
         const SizedBox(height: 15),
-        _buildTextField(
-          controller: emailController,
-          label: 'Email',
-          keyboardType: TextInputType.emailAddress,
-        ),
+        _buildTextField(context, controller: controller.emailController,
+            label: 'Email', keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 15),
-        _buildTextField(
-          controller: levelController,
-          label: 'Уровень',
-          keyboardType: TextInputType.number,
-        ),
+        _buildTextField(context, controller: controller.levelController,
+            label: 'Уровень', keyboardType: TextInputType.number, enabled: false),
         const SizedBox(height: 15),
-        _buildTextField(
-          controller: starsController,
-          label: 'Звёзды (XP)',
-          keyboardType: TextInputType.number,
-          enabled:false,
-        ),
+        _buildTextField(context, controller: controller.starsController,
+            label: 'Звёзды (XP)', keyboardType: TextInputType.number, enabled: false),
       ],
     );
-
   }
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    String? hint,
-    int? maxLength,
-    TextInputType? keyboardType,
-    bool enabled = true,
-  }) {
+
+  // Адаптивный виджет поля ввода
+  Widget _buildTextField(
+      BuildContext context, {
+        required TextEditingController controller,
+        required String label,
+        String? hint,
+        int? maxLength,
+        TextInputType? keyboardType,
+        bool enabled = true,
+      }) {
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+
     return TextFormField(
       controller: controller,
       maxLength: maxLength,
       keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: onSurface),
       enabled: enabled,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: const TextStyle(color: Colors.white),
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+        labelStyle: TextStyle(color: onSurface.withOpacity(0.8)),
+        hintStyle: TextStyle(color: onSurface.withOpacity(0.5)),
         counterText: '',
-        enabledBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.white, width: 1),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: onSurface.withOpacity(0.3), width: 1),
         ),
-        focusedBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: Color(0xFFFFC94B), width: 2),
+        disabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: onSurface.withOpacity(0.1), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
         ),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.08),
+        fillColor: onSurface.withOpacity(0.05),
       ),
     );
   }
 
-  Widget _buildSaveButton(VoidCallback onSave) {
+  Widget _buildSaveButton(BuildContext context, VoidCallback onSave) {
+    final theme = Theme.of(context);
+
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: onSave,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFFFC94B),
+          backgroundColor: theme.colorScheme.primary,
           foregroundColor: Colors.black,
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(

@@ -1,16 +1,12 @@
-# starplan
+# StarPlan (СтарПлан)
+**StarPlan** — это мобильное приложение для управления задачами с элементами геймификации, помогающее пользователям повышать продуктивность через систему наград, достижений и кастомизации интерфейса.
 
-A new Flutter project from miasima.
+## Описание
+Приложение создано для тех, кому сложно сохранять мотивацию при выполнении повседневных дел. **StarPlan** решает проблему скучного планирования, превращая выполнение задач в увлекательный процесс:
+* **Геймификация:** За выполнение задач пользователь получает «звезды».
+* **Система мотивации:** Заработанные звезды можно тратить во внутреннем магазине на новые темы оформления, аватары и трофеи.
+* **Аналитика:** Календарь с прогрессом и статистика выполнения задач позволяют отслеживать эффективность и формировать привычку регулярности.
 
-## Getting Started
+## Установка
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Для запуска проекта на локальной машине убедитесь, что у вас установлен [Flutter SDK](https://docs.flutter.dev/get-started/install).

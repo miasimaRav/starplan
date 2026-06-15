@@ -6,7 +6,7 @@ class Task {
   final DateTime? startDate;
   final DateTime? endDate;
   final int stars;
-  final bool completed;
+  bool completed;
 
   Task({
     required this.id,

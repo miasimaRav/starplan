@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/profile_info.dart';
-import 'package:starplan/presentation/pages/profile_page.dart';
-import 'package:starplan/presentation/pages/shop_page.dart';
+import 'package:StarPlan/presentation/pages/profile_info.dart';
+import 'package:StarPlan/presentation/pages/profile_page.dart';
+import 'package:StarPlan/presentation/pages/shop_page.dart';
 
+import '../../logic/ThemeProvider.dart';
 import 'home_page.dart';
 
 class RootPage extends StatefulWidget {
-  const RootPage({super.key});
+  final ThemeProvider themeProvider;
+  const RootPage({super.key, required this.themeProvider});
 
   @override
   State<RootPage> createState() => _RootPageState();
@@ -15,14 +17,24 @@ class RootPage extends StatefulWidget {
 class _RootPageState extends State<RootPage> {
   int _currentIndex = 0;
 
-  final _pages = const [
-    HomePage(),    // текущая HomePage без bottomNavigationBar
-    ProfilePage(), // профиль
-    ShopPage(),    // магазин
-  ];
+  // 2. Убираем const со списка страниц и делаем его поздней инициализацией
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    // 3. Заполняем список страниц, передавая провайдер в ShopPage
+    _pages = [
+      const HomePage(),
+      const ProfilePage(),
+      ShopPage(themeProvider: widget.themeProvider), // Передали провайдер в магазин!
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context); // Берем динамическую тему для нижней панели
+
     return Scaffold(
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
@@ -38,23 +50,14 @@ class _RootPageState extends State<RootPage> {
           setState(() => _currentIndex = index);
         },
         type: BottomNavigationBarType.fixed,
-        backgroundColor: const Color(0xFF020B3B),
-        selectedItemColor: const Color(0xFFFFC94B),
-        unselectedItemColor: Colors.white70,
+        // ИСПОЛЬЗУЕМ ДИНАМИЧЕСКИЕ ЦВЕТА ДЛЯ ПАНЕЛИ
+        backgroundColor: theme.scaffoldBackgroundColor,
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.6),
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Дом',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Профиль',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.shopping_cart),
-            label: 'Магазин',
-          ),
-
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Дом'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Магазин'),
         ],
       ),
     );

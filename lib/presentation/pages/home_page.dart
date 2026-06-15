@@ -1,25 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:starplan/presentation/pages/profile_page.dart';
+import 'package:StarPlan/core/app_settings.dart';
+import 'package:StarPlan/core/constants/app_colors.dart';
 
-import '../../data/database.dart';
+import '../../data/models/day_status.dart';
 import '../../data/models/task_model.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: const HomePage(),
-    );
-  }
-}
+import '../../logic/home_controller.dart';
+import '../widgets/empty_tasks_widget.dart';
+import '../widgets/task_row_widget.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,70 +14,123 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => HomePageState();
 }
+
 enum ViewMode { month, week, day }
 
 class HomePageState extends State<HomePage> {
-  ViewMode viewMode = ViewMode.month; //переменная для контроля просмотра дат
+  ViewMode viewMode = ViewMode.month;
   DateTime currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime selectedDate = DateTime.now();
-  int selectedDifficulty = 1;
-  // сколько дней в месяце выполнено полностью
-  int completedDaysInMonth = 0;
+  ThemeData get theme => Theme.of(context);
 
-// сколько дней в месяце вообще имеют задачи
-  int activeDaysInMonth = 0;
-  List<String> monthNames = [
-    '', // заглушка для индекса 0
-    'Января',
-    'Февраля',
-    'Марта',
-    'Апреля',
-    'Мая',
-    'Июня',
-    'Июля',
-    'Августа',
-    'Сентября',
-    'Октября',
-    'Ноября',
-    'Декабря',
-  ];
-
-  //late final currentMonthName = monthNames[selectedDate.month];
-  String get currentMonthName => monthNames[currentMonth.month];
+  final HomeController controller = HomeController();
 
   List<Task> _dayTasks = [];
-
-  double currentSliderValue = 1.0;
-
-  int currentTabIndex = 0;
-  // late final List<Widget> items = [buildTaskRow(Task.ti 'Задание 1'), Divider(),  buildTaskRow('Задание 2'),Divider(),
-  //   buildTaskRow('Задание 3'), Divider(), buildTaskRow('Задание 4')];
-
-  bool isEditMode = false;
-
-// Заглушка для статистики по дням ( потом брать из БД)
   final Map<DateTime, DayStatus> days = {};
 
-  int todayDoneTasks = 0;
-  int todayTotalTasks = 0;
+  int completedDaysInMonth = 0;
+  int activeDaysInMonth = 0;
+
+  List<String> monthNames = [
+    '', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+  ];
+
+  String get currentMonthName => monthNames[currentMonth.month];
 
   @override
   void initState() {
     super.initState();
-    loadDayStats(DateTime.now());
-    loadMonthStats(currentMonth); // Добавляем загрузку статистики месяца из БД для начальных цветов
+    _loadInitialData();
   }
 
+  Future<void> _loadInitialData() async {
+    await Future.wait([
+      loadTasks(selectedDate),
+      loadDayStats(selectedDate),
+      loadMonthStats(currentMonth),
+    ]);
+  }
+
+  Future<void> loadTasks(DateTime date) async {
+    final tasks = await controller.loadTasks(date);
+    if (!mounted) return;
+    setState(() => _dayTasks = tasks);
+  }
+
+  Future<void> loadDayStats(DateTime date) async {
+    final stats = await controller.loadDayStats(date);
+    if (!mounted) return;
+
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    setState(() {
+      if (stats['total'] == 0) {
+        days.remove(normalizedDate);
+      } else {
+        final done = stats['done'] ?? 0;
+        final total = stats['total'] ?? 0;
+
+        DayType type = DayType.warning;
+        if (done == total && total > 0) type = DayType.completed;
+        else if (done == 0) type = DayType.failed;
+
+        days[normalizedDate] = DayStatus(
+          doneTasks: done,
+          totalTasks: total,
+          type: type,
+        );
+      }
+
+      //пересчитываем карточку, если изменилось состояние конкретного дня
+      _updateMotivationStats();
+    });
+  }
+
+  Future<void> loadMonthStats(DateTime month) async {
+    final statsMap = await controller.loadMonthStats(month);
+
+    final Map<DateTime, DayStatus> newDays = {};
+
+    statsMap.forEach((date, status) {
+      newDays[date] = status;
+    });
+
+    if (!mounted) return;
+
+    setState(() {
+      days
+        ..clear()
+        ..addAll(newDays);
+
+      // автоматически пересчитываем карточку при загрузке месяца
+      _updateMotivationStats();
+    });
+  }
+
+// Обновление всех данных текущего представления и мотивационной карточки
+  Future<void> _refreshCurrentView() async {
+    if (!mounted) return;
+
+    // Сначала загружаем общую карту месяца
+    await loadMonthStats(currentMonth);
+
+    // Точечно обновляем задачи и показатели выбранного дня
+    await Future.wait([
+      loadTasks(selectedDate),    // обновляет список _dayTasks
+      loadDayStats(selectedDate), // накладывает точную статистику на выбранный день
+    ]);
+
+  }
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context); // Получаем текущую тему
+
     return Scaffold(
-// Фон можно задать через контейнер с BoxDecoration
       body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/background.png'),
-            fit: BoxFit.cover,
-          ),
+        // Используем нашу новую функцию для получения нужного градиента
+        decoration: BoxDecoration(
+          gradient: Theme.of(context).backgroundGradient,
         ),
         child: SafeArea(
           child: Column(
@@ -107,7 +147,6 @@ class HomePageState extends State<HomePage> {
           ),
         ),
       ),
-
     );
   }
 
@@ -122,66 +161,36 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> loadTasksForDate(DateTime date) async {
-    // Для "одного дня" делаем диапазон [00:00; 23:59]
-    final start = DateTime(date.year, date.month, date.day, 0, 0, 0);
-    final end = DateTime(date.year, date.month, date.day, 23, 59, 59);
-
-    final tasks = await DatabaseHelper.instance.getTasksBetweenDates(
-      start: start,
-      end: end,
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _dayTasks = tasks;
-    });
-  }
-
-  Future<void> loadDayStats(DateTime date) async {
-    final stats = await DatabaseHelper.instance.getTasksCountForDate(date);
-
-    if (!mounted) return;
-    setState(() {
-      todayDoneTasks = stats['done'] ?? 0;
-      todayTotalTasks = stats['total'] ?? 0;
-    });
-  }
-
-
-
-  void addTasksBottomSheet() {
-    // Локальное состояние внутри bottom sheet
+  Future<void> addTasksBottomSheet({Task? taskToEdit}) async {
+    final isEditing = taskToEdit != null;
     String? titleError;
-    DateTime? startDate;
-    DateTime? endDate;
-    int selectedDifficulty = 1;
-    int calculatedStars = 0;
 
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
+    DateTime? startDate = isEditing ? taskToEdit.startDate : selectedDate;
+    DateTime? endDate = isEditing ? taskToEdit.endDate : selectedDate;
+    int selectedDifficulty = isEditing ? taskToEdit.difficulty : 1;
 
-    // Функция для пересчёта звёзд
+    int calculatedStars = isEditing ? taskToEdit.stars : (selectedDifficulty * 1);
+
+    final titleController = TextEditingController(text: isEditing ? taskToEdit.title : '');
+    // Если описание null, ставим пустую строку
+    final descriptionController = TextEditingController(text: isEditing ? (taskToEdit.description ?? '') : '');
+
     void updateStars(StateSetter setSheetState) {
       DateTime taskStart = startDate ?? selectedDate;
       DateTime taskEnd = endDate ?? taskStart;
-
-      // Если конец раньше начала — меняем местами
       if (taskEnd.isBefore(taskStart)) {
         final tmp = taskStart;
         taskStart = taskEnd;
         taskEnd = tmp;
       }
-
       final days = taskEnd.difference(taskStart).inDays + 1;
       final newStars = selectedDifficulty * days;
-
       setSheetState(() {
         calculatedStars = newStars;
       });
     }
 
-    showModalBottomSheet(
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -193,9 +202,9 @@ class HomePageState extends State<HomePage> {
         expand: false,
         builder: (context, scrollController) => StatefulBuilder(
           builder: (context, setSheetState) => Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF020B3B),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             ),
             child: Column(
               children: [
@@ -207,85 +216,105 @@ class HomePageState extends State<HomePage> {
                     children: [
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
-                        child: const Text(
+                        child: Text(
                           'Отмена',
                           style: TextStyle(
-                            color: Color(0xFFFFC94B),
+                            color: theme.colorScheme.primary,
                             fontSize: 17,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-                      const Text(
-                        'Новое задание',
+                      Text(
+                        isEditing ? 'Редактирование' : 'Новое задание',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: theme.colorScheme.onSurface,
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       GestureDetector(
-                        onTap: titleController.text.trim().isEmpty
-                            ? null  // отключаем нажатие
-                            : () async {
-                          // Валидация
+                        onTap: () async {
                           final title = titleController.text.trim();
+
                           if (title.isEmpty) {
                             setSheetState(() {
-                              titleError = 'Введите название задачи';
+                              titleError = 'Обязательное поле';
                             });
                             return;
                           }
-
                           setSheetState(() {
                             titleError = null;
                           });
 
-                          final description = descriptionController.text.trim().isEmpty
-                              ? null
-                              : descriptionController.text.trim();
+                          // Это заставит базу перезаписать старое описание на пустое
+                          final description = descriptionController.text.trim();
 
                           DateTime taskStart = startDate ?? selectedDate;
                           DateTime taskEnd = endDate ?? taskStart;
-
-                          // Корректируем порядок дат
                           if (taskEnd.isBefore(taskStart)) {
                             final tmp = taskStart;
                             taskStart = taskEnd;
                             taskEnd = tmp;
                           }
-
                           final days = taskEnd.difference(taskStart).inDays + 1;
                           final stars = selectedDifficulty * days;
 
-                          // Сохраняем в базу
-                          await DatabaseHelper.instance.insertTask(
-                            title: title,
-                            description: description,
-                            difficulty: selectedDifficulty,
-                            startDate: taskStart,
-                            endDate: taskEnd,
-                            stars: stars,
-                            completed: false,
-                          );
+                          if (isEditing) {
+                            await controller.updateTask(
+                              id: taskToEdit.id!,
+                              title: title,
+                              description: description,
+                              difficulty: selectedDifficulty,
+                              startDate: taskStart,
+                              endDate: taskEnd,
+                              stars: stars,
+                            );
+                          } else {
+                            await controller.createTask(
+                              title: title,
+                              description: description,
+                              difficulty: selectedDifficulty,
+                              startDate: taskStart,
+                              endDate: taskEnd,
+                              stars: stars,
+                            );
+                          }
 
-                          // Обновляем интерфейс
                           await Future.wait([
-                            loadTasksForDate(selectedDate),
+                            loadTasks(selectedDate),
                             loadDayStats(selectedDate),
                             loadMonthStats(currentMonth),
                           ]);
 
                           if (!mounted) return;
+
+                          // Закрываем шторку
                           Navigator.pop(context);
+
+                          // ИСПРАВЛЕНИЕ 3: Показываем уведомление (SnackBar) для пользователя
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isEditing ? 'Задача успешно обновлена!' : 'Новая задача создана!',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              backgroundColor: AppColors.primary,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
                         },
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: const Text(
-                            'Добавить',
+                          child: Text(
+                            'Сохранить',
                             style: TextStyle(
-                              color: Color(0xFFFFC94B),
+                              color: theme.colorScheme.primary,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -295,35 +324,39 @@ class HomePageState extends State<HomePage> {
                     ],
                   ),
                 ),
-
                 const Divider(color: Colors.white12, height: 1),
-
                 Expanded(
                   child: ListView(
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     children: [
                       buildSectionTitle('Основная информация'),
-
-                      // Название
                       TextField(
                         controller: titleController,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
                           labelText: 'Название задачи',
-                          labelStyle: const TextStyle(color: Colors.white70),
+                          labelStyle: TextStyle(color: theme.colorScheme.onSurface),
                           errorText: titleError,
-                          errorStyle: const TextStyle(color: Colors.orangeAccent),
+                          errorStyle: const TextStyle(color: Colors.redAccent),
+                          errorBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                            borderSide: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.3)),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderSide: const BorderSide(color: Color(0xFFFFC94B), width: 2),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.06),
+                          fillColor: theme.colorScheme.onSurface.withOpacity(0.06),
                         ),
                         onChanged: (value) {
                           setSheetState(() {
@@ -332,29 +365,26 @@ class HomePageState extends State<HomePage> {
                         },
                       ),
                       const SizedBox(height: 20),
-
-                      // Описание
                       TextField(
                         controller: descriptionController,
                         maxLines: 3,
-                        style: const TextStyle(color: Colors.white),
+                        style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
                           labelText: 'Описание (необязательно)',
-                          labelStyle: const TextStyle(color: Colors.white70),
+                          labelStyle: TextStyle(color: theme.colorScheme.onSurface),
                           enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+                            borderSide: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.3)),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderSide: const BorderSide(color: Color(0xFFFFC94B), width: 2),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.06),
+                          fillColor: theme.colorScheme.onSurface.withOpacity(0.06),
                         ),
                       ),
                       const SizedBox(height: 28),
-
                       buildSectionTitle('Сложность'),
                       buildDifficultyDropdown(selectedDifficulty, (value) {
                         if (value != null) {
@@ -365,13 +395,12 @@ class HomePageState extends State<HomePage> {
                         }
                       }),
                       const SizedBox(height: 28),
-
                       buildSectionTitle('Сроки выполнения'),
                       buildDatePickerRow(
                         start: startDate,
                         end: endDate,
                         onPickStart: () async {
-                          final picked = await pickDate(context);
+                          final picked = await pickDate(context, startDate ?? selectedDate);
                           if (picked != null) {
                             setSheetState(() {
                               startDate = picked;
@@ -380,7 +409,7 @@ class HomePageState extends State<HomePage> {
                           }
                         },
                         onPickEnd: () async {
-                          final picked = await pickDate(context);
+                          final picked = await pickDate(context, endDate ?? selectedDate);
                           if (picked != null) {
                             setSheetState(() {
                               endDate = picked;
@@ -390,23 +419,22 @@ class HomePageState extends State<HomePage> {
                         },
                       ),
                       const SizedBox(height: 28),
-
                       buildSectionTitle('Ожидаемая награда'),
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
+                          color: theme.colorScheme.onSurface.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.star, color: Color(0xFFFFC94B), size: 28),
+                            Icon(Icons.star, color: theme.colorScheme.primary, size: 28),
                             const SizedBox(width: 12),
                             Text(
                               '$calculatedStars звёзд',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -423,76 +451,7 @@ class HomePageState extends State<HomePage> {
           ),
         ),
       ),
-    ).whenComplete(() {
-      titleController.dispose();
-      descriptionController.dispose();
-    });
-  }
-
-  int calculateStars({
-    required int difficulty,
-    required DateTime start,
-    required DateTime end,
-  }) {
-    final days = end.difference(start).inDays + 1; // включая стартовый день
-    return difficulty * days;
-  }
-
-
-  Future<void> loadMonthStats(DateTime month) async {
-    // первый и последний день месяца
-    final start = DateTime(month.year, month.month, 1);
-    final end = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
-
-    // получить агрегированную статистику по дням
-    // ожидается формат:
-    // {
-    //   DateTime(yyyy-mm-dd): { done: int, total: int }
-    // }
-    final stats = await DatabaseHelper.instance.getMonthDayStats(
-      start: start,
-      end: end,
     );
-
-    int completed = 0;
-    int active = 0;
-
-    final Map<DateTime, DayStatus> newDays = {};
-
-    stats.forEach((date, value) {
-      final done = value['done'] ?? 0;
-      final total = value['total'] ?? 0;
-
-      if (total > 0) {
-        active++;
-
-        DayType type;
-        if (done == total) {
-          completed++;
-          type = DayType.completed;
-        } else if (done == 0) {
-          type = DayType.failed;
-        } else {
-          type = DayType.warning;
-        }
-
-        newDays[date] = DayStatus(
-          doneTasks: done,
-          totalTasks: total,
-          type: type,
-        );
-      }
-    });
-
-    if (!mounted) return;
-
-    setState(() {
-      completedDaysInMonth = completed;
-      activeDaysInMonth = active;
-      days
-        ..clear()
-        ..addAll(newDays);
-    });
   }
 
   Widget buildSectionTitle(String title) => Padding(
@@ -503,15 +462,15 @@ class HomePageState extends State<HomePage> {
           width: 4,
           height: 24,
           decoration: BoxDecoration(
-            color: Color(0xFFFFC94B),
+            color: AppColors.primary,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
         const SizedBox(width: 12),
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
@@ -540,7 +499,7 @@ class HomePageState extends State<HomePage> {
             Container(
               width: 2,
               height: 48,
-              color: Colors.white.withOpacity(0.4),
+              color: theme.colorScheme.onSurface.withOpacity(0.4),
               margin: const EdgeInsets.symmetric(horizontal: 16),
             ),
             Expanded(
@@ -559,16 +518,16 @@ class HomePageState extends State<HomePage> {
   Widget buildDifficultyDropdown(int value, void Function(int?) onChanged) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.08),
+      color: theme.colorScheme.onSurface.withOpacity(0.08),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withOpacity(0.2)),
+      border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.2)),
     ),
     child: DropdownButtonHideUnderline(
       child: DropdownButton<int>(
         value: value,
         isExpanded: true,
-        dropdownColor: const Color(0xFF020C42),
-        style: const TextStyle(color: Colors.white, fontSize: 16),
+        dropdownColor: theme.cardColor,
+        style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
         items: const [
           DropdownMenuItem(value: 1, child: Text('1 - Очень легко')),
           DropdownMenuItem(value: 2, child: Text('2 - Легко')),
@@ -585,9 +544,9 @@ class HomePageState extends State<HomePage> {
   Widget buildDateButton({required String label, required VoidCallback onTap}) => Container(
     height: 56,
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.08),
+      color: theme.colorScheme.onSurface.withOpacity(0.08),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withOpacity(0.2)),
+      border: Border.all(color: theme.colorScheme.onSurface.withOpacity(0.2)),
     ),
     child: Material(
       color: Colors.transparent,
@@ -595,136 +554,213 @@ class HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Center(
-          child: Text(label, style: const TextStyle(color: Color(0xFFFFC94B), fontSize: 16, fontWeight: FontWeight.w600)),
+          child: Text(label, style: const TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w600)),
         ),
       ),
     ),
   );
 
-  Widget buildStarsSelector(int currentStars, StateSetter setState) => Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
-      ),
-      child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Text(
-              'Звезды ',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w400,
+
+  Future<DateTime?> pickDate(BuildContext context, DateTime initialDate) async {
+    final theme = Theme.of(context); // Получаем текущую тему приложения
+
+    return await showDatePicker(
+      context: context,
+      initialDate: initialDate, // Календарь откроется на уже выбранной дате
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: theme.copyWith(
+            colorScheme: theme.colorScheme.copyWith(
+              primary: AppColors.primary,
+              onPrimary: theme.colorScheme.onPrimary,               // Черный текст на кнопках и круге
+              surface: theme.cardColor,              // Фон самого окошка календаря
+              onSurface: theme.textTheme.bodyLarge?.color, // Цвет чисел и дней недели
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary, // Цвет кнопок
               ),
             ),
-            SizedBox(width: 150,
-                child:
-                TextFormField(
-                  readOnly: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    label: Text('100'),
-                    labelStyle: const TextStyle(color: Colors.white),
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    enabledBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white, width: 1),
-                    ),
-                    focusedBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFFFFC94B), width: 2),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.08),
-                    enabled: false,
-                  ),
-                )
-            )
-          ]
-      )
-  );
-
-  Future<DateTime?> pickDate(BuildContext context) {
-    return showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020), // ← ключевая строка
-      lastDate: DateTime(2100),
+          ),
+          child: child!,
+        );
+      },
     );
   }
 
-
-  Widget textField({
-    required String label,
-    required TextEditingController controller,
-    String? hint,
-    int maxLines = 1,
-    TextInputType keyboardType = TextInputType.text,
-    bool enabled = true,
-  }) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      enabled: enabled,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        labelStyle: const TextStyle(color: Colors.white),
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-        counterText: '',
-        enabledBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.white, width: 1),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: Color(0xFFFFC94B), width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.08),
-      ),
-    );
-  }
-
-
-
-// Верхний бар с месяцем и кнопками меню/добавить
+// Верхний бар с месяцем строго по центру (без накладывания)
   Widget buildTopBar() {
     final monthTitle = '$currentMonthName ${selectedDate.year}';
+
+    // Ширина одной стандартной иконки-кнопки во Flutter обычно 48 пикселей
+    //  две кнопки справа (48 * 2 = 96), делаем такой же пустой отступ слева для баланса
+    const double buttonsWidth = 96.0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () {
-              // TODO: открыть боковое меню
-            },
-            icon: const Icon(Icons.menu, color: Colors.white),
-          ),
+          // Левый невидимый отступ для идеального центрирования текста
+          const SizedBox(width: buttonsWidth),
+
+          // Название месяца (занимает всё центральное пространство)
           Expanded(
             child: Center(
               child: GestureDetector(
                 onTap: pickMonthAndYear,
                 child: Text(
                   monthTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis, // если экран совсем узкий,
+                  // текст аккуратно сократится
                 ),
               ),
-
             ),
           ),
-          IconButton(
-            onPressed: () {
-              addTasksBottomSheet();
-            },
-            icon: const Icon(Icons.add, color: Colors.white),
+
+          //Блок кнопок справа (ширина как раз около 96 пикселей)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () {
+                  _showRulesDialog(context);
+                },
+                icon: Icon(Icons.help_outline, color: theme.colorScheme.onSurface),
+                tooltip: 'Правила начисления звёзд',
+              ),
+              IconButton(
+                onPressed: () {
+                  addTasksBottomSheet();
+                },
+                icon: Icon(Icons.add, color: theme.colorScheme.onSurface),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  //диалоговое окно
+  void _showRulesDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: theme.cardColor, // Темный фон
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.star, color: Colors.amber, size: 28),
+              const SizedBox(width: 10),
+              Text(
+                'Правила начисления',
+                style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Выполняйте задачи, зарабатывайте звёзды и открывайте новые достижения!',
+                  style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 16),
+                ),
+                const SizedBox(height: 20),
+
+                // Блок 1: Однодневные задачи
+                _buildRuleRow(
+                  icon: Icons.looks_one,
+                  title: 'Обычные задачи (1 день)',
+                  description: 'Вы получаете всю стоимость задачи сразу при её выполнении.',
+                ),
+                const SizedBox(height: 16),
+
+                // Блок 2: Многодневные задачи
+                _buildRuleRow(
+                  icon: Icons.calendar_month,
+                  title: 'Многодневные задачи',
+                  description:
+                      '• Каждый промежуточный день вы получаете по 1 ⭐ за поддержание привычки.\n'
+                      '• В финальный день вам начисляется вся оставшаяся сумма от общей стоимости задачи!',
+                ),
+                const SizedBox(height: 12),
+
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 8),
+                const Text(
+                  'Если вы снимете галочку с выполненной задачи, заработанные за этот день звёзды спишутся!',
+                  style: TextStyle(color: Colors.redAccent, fontSize: 14, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.primary,
+              ),
+              child: const Text(
+                'Понятно',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+// Вспомогательный виджет для красивой строки правил начисления звезд
+  Widget _buildRuleRow({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.amberAccent, size: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style:  TextStyle(
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 15,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -754,7 +790,7 @@ class HomePageState extends State<HomePage> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: theme.colorScheme.onSurface.withOpacity(0.06),
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(4),
@@ -793,23 +829,6 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  Widget buildCalendarWrapper() {
-    return GestureDetector(
-      onHorizontalDragEnd: (details) {
-        if (details.primaryVelocity == null) return;
-
-        if (details.primaryVelocity! < 0) {
-          // свайп влево - следующий месяц
-          changeMonth(1);
-        } else if (details.primaryVelocity! > 0) {
-          // свайп вправо - предыдущий месяц
-          changeMonth(-1);
-        }
-      },
-      child: buildCalendar(),
-    );
-  }
-
   void changeMonth(int offset) {
     setState(() {
       currentMonth = DateTime(
@@ -825,71 +844,8 @@ class HomePageState extends State<HomePage> {
   }
 
 
-  Widget buildTaskRow(Task task) {
-    return MenuAnchor(
-      menuChildren: [
-        MenuItemButton(
-          child: const Text('Изменить'),
-          onPressed: () {
-            // TODO: открыть экран редактирования задачи
-          },
-        ),
-        MenuItemButton(
-          child: const Text(
-            'Удалить',
-            style: TextStyle(color: Colors.red),
-          ),
-          onPressed: () async {
-            // Удаляем задачу из базы
-            await DatabaseHelper.instance.deleteTask(task.id!);
-            // Обновляем задачи и статистику
-            await loadTasksForDate(selectedDate);
-            await loadDayStats(selectedDate);
-            await loadMonthStats(currentMonth);
-          },
-        ),
-      ],
-      builder: (BuildContext context, MenuController controller, Widget? child) {
-        return GestureDetector(
-          onLongPress: () {
-            controller.isOpen ? controller.close() : controller.open();
-          },
-          child: child,
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                task.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Checkbox(
-              value: task.completed,
-              onChanged: (value) async {
-                await DatabaseHelper.instance.updateTaskCompleted(
-                  task.id!,
-                  value ?? false,
-                );
-                await loadTasksForDate(selectedDate);
-                await loadDayStats(selectedDate);
-                await loadMonthStats(currentMonth);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget buildSegmentButton(String text, bool selected, VoidCallback onTap) {
+    final theme = Theme.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -897,7 +853,7 @@ class HomePageState extends State<HomePage> {
           height: 36,
           decoration: BoxDecoration(
             color: selected
-                ? const Color(0xFFFFC94B)
+                ? theme.colorScheme.primary
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
@@ -905,7 +861,7 @@ class HomePageState extends State<HomePage> {
           child: Text(
             text,
             style: TextStyle(
-              color: selected ? Colors.black : Colors.white,
+              color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -957,108 +913,129 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  //
+
   Widget buildWeekView() {
-    final startOfWeek = selectedDate.subtract(Duration(days: selectedDate.weekday - 1)); // Пн
+    final startOfWeek = selectedDate.subtract(Duration(days: selectedDate.weekday - 1)); // понедельник
     final weekDays = List.generate(7, (i) => startOfWeek.add(Duration(days: i)));
-
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Column(
-          children: [
-            buildWeekdayRow(),
-            const SizedBox(height: 4),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: weekDays.map((date) => Expanded(child: buildDayCell(date))).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-  Widget buildDayView() {
-    // Загружаем данные, если ещё не загружены
-    // (на случай, если перешли в режим "День" без предварительного выбора)
-    if (_dayTasks.isEmpty && todayTotalTasks == 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        loadTasksForDate(selectedDate);
-        loadDayStats(selectedDate);
-      });
-    }
-
-    final String dayTitle =
-        "${selectedDate.day} ${monthNames[selectedDate.month]} ${selectedDate.year}";
 
     return Expanded(
       child: Column(
         children: [
-          const SizedBox(height: 12),
-
-          // Заголовок дня
+          // Заголовок недели + переключатели
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  dayTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                // Можно добавить кнопку "Добавить задачу"
                 IconButton(
-                  icon: const Icon(Icons.add_circle, color: Color(0xFFFFC94B), size: 32),
-                  onPressed: addTasksBottomSheet,
+                  icon: Icon(Icons.chevron_left, color: theme.colorScheme.onSurface),
+                  onPressed: () => _changeWeek(-1),
+                ),
+                Column(
+                  children: [
+                    Text(
+                      "${weekDays.first.day} - ${weekDays.last.day} ",
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      "${monthNames[selectedDate.month]} ${selectedDate.year}",
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: Icon(Icons.chevron_right, color: theme.colorScheme.onSurface),
+                  onPressed: () => _changeWeek(1),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          // Прогресс
+          // 7 дней недели
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: buildTodayProgress(),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: weekDays.map((date) {
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () async {
+                      setState(() {
+                        selectedDate = date;
+                      });
+                      await loadTasks(date);
+                      await loadDayStats(date);
+                    },
+                    child: buildWeekDayCell(date),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-          // Список задач или пустое состояние
+          // Список задач выбранного дня
           Expanded(
-            child: _dayTasks.isEmpty
-                ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.hourglass_empty, size: 70, color: Colors.white38),
-                  SizedBox(height: 20),
-                  Text(
-                    "На этот день задач пока нет",
-                    style: TextStyle(color: Colors.white70, fontSize: 20),
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    "Добавьте задание с помощью кнопки «+»",
-                    style: TextStyle(color: Colors.white54, fontSize: 16),
-                  ),
-                ],
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(20),
               ),
-            )
-                : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ListView.builder(
+              child: _dayTasks.isEmpty
+                  ? const EmptyTasksWidget()
+                  : ListView.builder(
+                padding: const EdgeInsets.all(12),
                 itemCount: _dayTasks.length,
                 itemBuilder: (context, index) {
-                  return buildTaskRow(_dayTasks[index]);
+                  final task = _dayTasks[index];
+                  return GestureDetector(
+                    key: ValueKey(identityHashCode(task)),
+                    onLongPress: () async {
+                      // 1. Открываем меню действий
+                      final String? action = await _showActionMenu(context, task);
+
+                      if (action == 'edit') {
+                        // 2. Ждем, пока пользователь отредактирует задачу
+                        await addTasksBottomSheet(taskToEdit: task);
+                        // 3. Обновляем главный экран (в режиме дня setState обновит всё сразу)
+                        setState(() {});
+                      } else if (action == 'delete') {
+                        // 2. Удаляем из БД
+                        await controller.deleteTask(task.id!);
+                        await _refreshCurrentView();
+                        setState(() {});
+                      }
+                    },
+                      child: TaskRowWidget(
+                      task: task,
+                      onDelete: () async {
+                        await controller.deleteTask(task.id!);
+                        await _refreshCurrentView();
+                      },
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await controller.updateTaskProgress(
+                          taskId: _dayTasks[index].id!,
+                          date: selectedDate, //дата задачи которую отметили
+                          completed: value,
+                        );
+                        await _refreshCurrentView();
+                      },
+                    ),
+                  );
                 },
               ),
             ),
@@ -1066,6 +1043,217 @@ class HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  Widget buildWeekDayCell(DateTime date) {
+    final isSelected = date.year == selectedDate.year &&
+        date.month == selectedDate.month &&
+        date.day == selectedDate.day;
+
+    final isToday = date.year == DateTime.now().year &&
+        date.month == DateTime.now().month &&
+        date.day == DateTime.now().day;
+
+    final status = days[date];
+
+    Color bgColor = theme.colorScheme.onSurface.withOpacity(0.08);
+    if (isSelected) bgColor = AppColors.primary;
+    else if (isToday) bgColor = AppColors.white;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 3),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][date.weekday - 1],
+            style: TextStyle(
+              color: isSelected ? Colors.black : theme.colorScheme.onSurface,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${date.day}',
+            style: TextStyle(
+              color: isSelected ? Colors.black : theme.colorScheme.onSurface,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (status != null)
+            Icon(
+              status.type == DayType.completed ? Icons.check_circle :
+              status.type == DayType.warning ? Icons.warning_amber :
+              Icons.error_outline,
+              size: 14,
+              color: isSelected ? Colors.black87 : theme.colorScheme.onSurface,
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _changeWeek(int offset) {
+    setState(() {
+      selectedDate = selectedDate.add(Duration(days: 7 * offset));
+    });
+
+    // Обновляем задачи для нового выбранного дня
+    loadTasks(selectedDate);
+    loadDayStats(selectedDate);
+  }
+
+  Widget buildDayView() {
+    return Expanded(
+      child: Column(
+        children: [
+          // Заголовок с выбором даты
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.chevron_left, color: theme.colorScheme.onSurface, size: 32),
+                  onPressed: () => _changeDay(-1),
+                ),
+
+                GestureDetector(
+                  onTap: _pickDateInDayView,
+                  child: Column(
+                    children: [
+                      Text(
+                        "${selectedDate.day}",
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        "${monthNames[selectedDate.month]} ${selectedDate.year}",
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                IconButton(
+                  icon: Icon(Icons.chevron_right, color: theme.colorScheme.onSurface, size: 32),
+                  onPressed: () => _changeDay(1),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Прогресс выполнения
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: buildTodayProgress(),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Список задач
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: _dayTasks.isEmpty
+                  ? const EmptyTasksWidget()
+                  : ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _dayTasks.length,
+                itemBuilder: (context, index) {
+                  final task = _dayTasks[index];
+                  return GestureDetector(
+                    key: ValueKey(identityHashCode(task)),
+                    onLongPress: () async {
+                      // 1. Открываем меню действий
+                      final String? action = await _showActionMenu(context, task);
+
+                      if (action == 'edit') {
+                        // 2. Ждем, пока пользователь отредактирует задачу
+                        await addTasksBottomSheet(taskToEdit: task);
+                        // 3. Обновляем главный экран (в режиме дня setState обновит всё сразу)
+                        setState(() {});
+                      } else if (action == 'delete') {
+                        // 2. Удаляем из БД
+                        await controller.deleteTask(task.id!);
+                        await _refreshCurrentView();
+                        setState(() {});
+                      }
+                    },
+                      child: TaskRowWidget(
+                      task: task,
+                      onDelete: () async {
+                        await controller.deleteTask(_dayTasks[index].id!);
+                        await _refreshCurrentView();
+                      },
+                      onChanged: (value) async {
+                        if (value == null) return;
+
+                        await controller.updateTaskProgress(
+                          taskId: _dayTasks[index].id!,
+                          date: selectedDate,      // передаём дату, на которой отметили
+                          completed: value,
+                        );
+
+                        await _refreshCurrentView();
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Смена дня на след.
+  void _changeDay(int offset) {
+    setState(() {
+      selectedDate = selectedDate.add(Duration(days: offset));
+    });
+
+    loadTasks(selectedDate);
+    loadDayStats(selectedDate);
+  }
+
+  // Выбор даты через календарь
+  Future<void> _pickDateInDayView() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked != null && picked != selectedDate) {
+      setState(() {
+        selectedDate = picked;
+      });
+
+      await loadTasks(picked);
+      await loadDayStats(picked);
+    }
   }
 
   Widget buildWeekdayRow() {
@@ -1080,7 +1268,7 @@ class HomePageState extends State<HomePage> {
                 child: Text(
                   e,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1106,22 +1294,22 @@ class HomePageState extends State<HomePage> {
     Color bgColor;
     switch (status?.type) {
       case DayType.completed:
-        bgColor = const Color(0xFF00B894);
+        bgColor = AppColors.success;
         break;
       case DayType.failed:
-        bgColor = const Color(0xFFB71359);
+        bgColor = AppColors.failed;
         break;
       case DayType.warning:
-        bgColor = const Color(0xFF1E90FF);
+        bgColor = AppColors.warning;
         break;
       default:
-        bgColor = Colors.white.withOpacity(0.08);
+        bgColor = theme.colorScheme.onSurface.withOpacity(0.08);
     }
 
     if (isSelected) {
-      bgColor = Colors.white.withOpacity(0.3);
+      bgColor = theme.colorScheme.onSurface.withOpacity(0.3);
     } else if (isToday) {
-      bgColor = Colors.white.withOpacity(0.15);
+      bgColor = theme.colorScheme.onSurface.withOpacity(0.15);
     }
 
     return GestureDetector(
@@ -1132,7 +1320,7 @@ class HomePageState extends State<HomePage> {
 
         // сначала грузим
         await Future.wait([
-          loadTasksForDate(date),
+          loadTasks(date),
           loadDayStats(date),
         ]);
 
@@ -1146,7 +1334,7 @@ class HomePageState extends State<HomePage> {
           color: bgColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? theme.colorScheme.onSurface : Colors.transparent,
             width: 1.5,
           ),
         ),
@@ -1156,8 +1344,8 @@ class HomePageState extends State<HomePage> {
           children: [
             Text(
               '${date.day}',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1171,7 +1359,7 @@ class HomePageState extends State<HomePage> {
                   if (status.type == DayType.failed)
                     const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
                   if (status.type == DayType.warning)
-                    const Icon(Icons.error_outline, color: Colors.white, size: 16),
+                    Icon(Icons.error_outline, color: theme.colorScheme.onSurface, size: 16),
                 ],
               ),
           ],
@@ -1180,7 +1368,10 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  void showDayTasksBottomSheet() { //возможно улучшение?
+  
+
+  void showDayTasksBottomSheet() {
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,               // позволяет full-screen
@@ -1195,62 +1386,111 @@ class HomePageState extends State<HomePage> {
           expand: false,
 
           builder: (context, scrollController) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF020B3B),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              padding: const EdgeInsets.all(4),
-              child: Column(
-                children: [
-                  // полоса для перетаскивания
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Задачи на день',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
+            return StatefulBuilder(
+              builder: (context, setBottomSheetState) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: theme.scaffoldBackgroundColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.all(4),
+                child: Column(
+                  children: [
+                    // полоса для перетаскивания
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                      Divider(),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Задачи на день',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        Divider(),
+                      ],
+                    ),
 
-                  const SizedBox(height: 16),
-                  buildTodayProgress(),
+                    const SizedBox(height: 16),
+                    buildTodayProgress(),
 
-                  // контент, который может прокручиваться и уходить ниже экрана
-                  Expanded(
+                    // контент, который может прокручиваться и уходить ниже экрана
+                    Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: ListView.builder(
                           controller: scrollController,
                           itemCount: _dayTasks.length,
                           itemBuilder: (context, index) {
-                            final task = _dayTasks[index];
-                            return buildTaskRow(task); // TODO: добавить полное описание задачи
+                            final task = _dayTasks[index]; // Выносим для читаемости кода
+
+                            return GestureDetector(
+                              // НАЧАЛО: Ловим долгое нажатие на карточку задачи
+                              onLongPress: () async {
+                                // Открываем меню действий и ждем, что выберет пользователь
+                                final String? action = await _showActionMenu(context, task);
+
+                                if (action == 'edit') {
+                                  // Если выбрали редактировать — открываем наше обновленное окно
+                                  // Добавляем await, чтобы код остановился и ждал,
+                                  // пока addTasksBottomSheet закроется
+                                  await addTasksBottomSheet(taskToEdit: task);
+                                  // Когда окно редактирования закрылось
+                                  // принудительно обновляем список задач на день
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                } else if (action == 'delete') {
+                                  // Если выбрали удалить — удаляем, обновляем базу
+                                  // и перерисовываем текущий BottomSheet
+                                  await controller.deleteTask(task.id!);
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                }
+                              },
+
+
+                              child: TaskRowWidget(
+                                task: task,
+                                onDelete: () async {
+                                  await controller.deleteTask(task.id!);
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                },
+                                onChanged: (value) async {
+                                  if (value == null) return;
+
+                                  await controller.updateTaskProgress(
+                                    taskId: task.id!,
+                                    date: selectedDate,      // передаём дату, на которой отметили
+                                    completed: value,
+                                  );
+
+                                  await _refreshCurrentView();
+                                  setBottomSheetState(() {});
+                                },
+                              ),
+                            );
                           },
                         ),
-                      )
-
-                  ),
-                ],
-              ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+              },
             );
           },
         );
@@ -1258,63 +1498,70 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  Widget tasksDay() {
-    return Column(
-      children: [
-        Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF020B3B),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(4),
+  Future<String?> _showActionMenu(BuildContext context, Task task) {
+    final theme = Theme.of(context); // Получаем текущую тему
+
+    return showModalBottomSheet<String>(
+      context: context,
+      // Используем цвет карточки для фона шторки (он адаптируется под каждую тему)
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Полоса для перетаскивания
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Задачи на день',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-
-              // Прогресс выполнения
-              buildTodayProgress(),
-
-              // Список задач
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: ListView.builder(
-                    itemCount: _dayTasks.length,
-                    itemBuilder: (context, index) {
-                      final task = _dayTasks[index];
-                      return buildTaskRow(task); // передаем Task
-                    },
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  task.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
+              // Адаптивный разделитель
+              Divider(
+                color: theme.colorScheme.onSurface.withOpacity(0.12),
+                height: 1,
+              ),
+              ListTile(
+                // Иконка теперь красится в цвет темы (золотой, бирюзовый или желтый)
+                leading: Icon(Icons.edit, color: theme.colorScheme.primary),
+                title: Text(
+                  'Редактировать',
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                onTap: () {
+                  Navigator.pop(context, 'edit');
+                },
+              ),
+              ListTile(
+                // Используем настроенный в вашей теме AppColors.failed через theme.colorScheme.error
+                leading: Icon(Icons.delete, color: theme.colorScheme.error),
+                title: Text(
+                  'Удалить',
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context, 'delete');
+                },
+              ),
             ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
-
-
 
 // блок с % выполнения задач
   Widget buildTodayProgress() {
@@ -1329,9 +1576,9 @@ class HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$done/$total задач выполнено', // TODO: подгружать количество задач из бд
-            style: const TextStyle(
-              color: Colors.white,
+            '$done/$total задач выполнено',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -1340,7 +1587,7 @@ class HomePageState extends State<HomePage> {
           Text(
             '${(percent * 100).round()}%',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
               fontSize: 12,
             ),
           ),
@@ -1350,9 +1597,9 @@ class HomePageState extends State<HomePage> {
             child: LinearProgressIndicator(
               value: percent,
               minHeight: 8,
-              backgroundColor: Colors.white.withOpacity(0.1),
+              backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
               valueColor: const AlwaysStoppedAnimation<Color>(
-                  Color(0xFFFFC94B)),
+                  AppColors.primary),
             ),
           ),
         ],
@@ -1360,22 +1607,87 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-// карточка внизу
+  // Централизованный метод для пересчета статистики мотивационной карточки
+  void _updateMotivationStats() {
+    int activeDays = 0;
+    int completedDays = 0;
+
+    days.forEach((date, status) {
+      // Если в этот день была хоть одна задача
+      if (status.totalTasks > 0) {
+        activeDays++;
+
+        // Если все задачи в этот день выполнены
+        if (status.doneTasks == status.totalTasks) {
+          completedDays++;
+        }
+      }
+    });
+
+    activeDaysInMonth = activeDays;
+    completedDaysInMonth = completedDays;
+  }
+
+  // мотивирующая карточка внизу страницы
   Widget buildMotivationCard() {
-    if (activeDaysInMonth == 0) {
-      // если в месяце нет задач — карточку не показываем
-      return const SizedBox.shrink();
+    // Динамический подсчет статистики прямо в момент рендеринга
+    int activeDays = 0;
+    int completedDays = 0;
+
+    days.forEach((date, status) {
+      // Фильтруем строго по текущему месяцу и году, чтобы избежать багов при переходе границ месяцев
+      if (date.month == currentMonth.month && date.year == currentMonth.year) {
+        if (status.totalTasks > 0) {
+          activeDays++;
+          if (status.doneTasks == status.totalTasks) {
+            completedDays++;
+          }
+        }
+      }
+    });
+
+    // Декларативное определение текстов и иконок для разных сценариев
+    String title;
+    String subtitle;
+    IconData cardIcon;
+    Color iconColor;
+
+    if (activeDays == 0) {
+      // Сценарий 1: Задач на месяц вообще нет
+      title = 'В этом месяце пока нет активных дней. Время планировать!';
+      subtitle = 'Каждая большая цель начинается с первой задачи.';
+      cardIcon = Icons.calendar_today_rounded;
+      iconColor = theme.colorScheme.onSurface;
+    } else if (completedDays == 0) {
+      // Сценарий 2: Задачи добавлены (например, в начале недели), но ещё не завершены
+      title = 'Запланировано дней с задачами: $activeDays. Отличный старт!';
+      subtitle = 'Продуктивные дни впереди! Сделай первый шаг и выполни задачу сегодня.';
+      cardIcon = Icons.rocket_launch_rounded;
+      iconColor = AppColors.primary;
+    } else if (completedDays == activeDays) {
+      // Сценарий 3: Идеальный результат (все активные дни завершены)
+      title = 'Продуктивных дней: $completedDays из $activeDays! Идеальный результат!';
+      subtitle = 'Потрясающе! Ты закрыл абсолютно все запланированные задачи!';
+      cardIcon = Icons.emoji_events_rounded;
+      iconColor = Colors.amber;
+    } else {
+      // Сценарий 4: Обычный рабочий процесс (часть дней выполнена, часть в процессе)
+      title = 'Продуктивных дней в этом месяце: $completedDays из $activeDays!';
+      subtitle = 'Хороший темп! Продолжай в том же духе, у тебя всё получается!';
+      cardIcon = Icons.star_rounded;
+      iconColor = AppColors.primary;
     }
 
+    // 3. Возвращаем ваш оригинальный виджет с новыми динамическими данными
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.09),
+          color: theme.colorScheme.onSurface.withOpacity(0.09),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white),
+          border: Border.all(color: theme.colorScheme.onSurface),
           boxShadow: const [
             BoxShadow(color: Colors.black26),
           ],
@@ -1383,27 +1695,25 @@ class HomePageState extends State<HomePage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.star, color: Color(0xFFFFC94B)),
+            Icon(cardIcon, color: iconColor),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Ты выполнил $completedDaysInMonth из $activeDaysInMonth дней в этом месяце',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    title,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
-                    completedDaysInMonth == activeDaysInMonth
-                        ? 'Идеальный месяц 🔥'
-                        : 'Продолжай в том же духе!',
-                    style: const TextStyle(
-                      color: Colors.white70,
+                    subtitle,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
                       fontSize: 12,
                     ),
                   ),
@@ -1416,38 +1726,4 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-}
-
-class LongPressListItem extends StatelessWidget {
-  final Widget item;
-  final VoidCallback onLongPress;
-
-  const LongPressListItem({
-    required this.item,
-    required this.onLongPress,
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onLongPress: onLongPress,
-      child: item,
-    );
-  }
-}
-
-
-enum DayType { completed, failed, warning }
-
-class DayStatus {
-  final int doneTasks;
-  final int totalTasks;
-  final DayType type;
-
-  DayStatus({
-    required this.doneTasks,
-    required this.totalTasks,
-    required this.type,
-  });
 }
