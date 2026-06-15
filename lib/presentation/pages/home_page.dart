@@ -165,40 +165,32 @@ class HomePageState extends State<HomePage> {
     final isEditing = taskToEdit != null;
     String? titleError;
 
-    // Если редактируем — берем даты из задачи, если нет — текущую выбранную дату
     DateTime? startDate = isEditing ? taskToEdit.startDate : selectedDate;
     DateTime? endDate = isEditing ? taskToEdit.endDate : selectedDate;
-
-    // Сложность: старая из задачи или 1 по умолчанию
     int selectedDifficulty = isEditing ? taskToEdit.difficulty : 1;
 
-    // Звёзды: старые из задачи или считаем стартовые для новой задачи
     int calculatedStars = isEditing ? taskToEdit.stars : (selectedDifficulty * 1);
 
-    // Инициализируем текстовые поля старыми данными при редактировании
     final titleController = TextEditingController(text: isEditing ? taskToEdit.title : '');
+    // Если описание null, ставим пустую строку
     final descriptionController = TextEditingController(text: isEditing ? (taskToEdit.description ?? '') : '');
 
-    // Функция для пересчёта звёзд
     void updateStars(StateSetter setSheetState) {
       DateTime taskStart = startDate ?? selectedDate;
       DateTime taskEnd = endDate ?? taskStart;
-
       if (taskEnd.isBefore(taskStart)) {
         final tmp = taskStart;
         taskStart = taskEnd;
         taskEnd = tmp;
       }
-
       final days = taskEnd.difference(taskStart).inDays + 1;
       final newStars = selectedDifficulty * days;
-
       setSheetState(() {
         calculatedStars = newStars;
       });
     }
 
-    showModalBottomSheet(
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -233,7 +225,6 @@ class HomePageState extends State<HomePage> {
                           ),
                         ),
                       ),
-                      // Динамический заголовок шапки
                       Text(
                         isEditing ? 'Редактирование' : 'Новое задание',
                         style: TextStyle(
@@ -243,38 +234,32 @@ class HomePageState extends State<HomePage> {
                         ),
                       ),
                       GestureDetector(
-                        onTap: titleController.text.trim().isEmpty
-                            ? null
-                            : () async {
+                        onTap: () async {
                           final title = titleController.text.trim();
+
                           if (title.isEmpty) {
                             setSheetState(() {
-                              titleError = 'Введите название задачи';
+                              titleError = 'Обязательное поле';
                             });
                             return;
                           }
-
                           setSheetState(() {
                             titleError = null;
                           });
 
-                          final description = descriptionController.text.trim().isEmpty
-                              ? null
-                              : descriptionController.text.trim();
+                          // Это заставит базу перезаписать старое описание на пустое
+                          final description = descriptionController.text.trim();
 
                           DateTime taskStart = startDate ?? selectedDate;
                           DateTime taskEnd = endDate ?? taskStart;
-
                           if (taskEnd.isBefore(taskStart)) {
                             final tmp = taskStart;
                             taskStart = taskEnd;
                             taskEnd = tmp;
                           }
-
                           final days = taskEnd.difference(taskStart).inDays + 1;
                           final stars = selectedDifficulty * days;
 
-                          // РАЗВЕТВЛЕНИЕ: Сохранение (Create) или Обновление (Update)
                           if (isEditing) {
                             await controller.updateTask(
                               id: taskToEdit.id!,
@@ -296,7 +281,6 @@ class HomePageState extends State<HomePage> {
                             );
                           }
 
-                          // Обновляем интерфейс
                           await Future.wait([
                             loadTasks(selectedDate),
                             loadDayStats(selectedDate),
@@ -304,7 +288,25 @@ class HomePageState extends State<HomePage> {
                           ]);
 
                           if (!mounted) return;
+
+                          // Закрываем шторку
                           Navigator.pop(context);
+
+                          // ИСПРАВЛЕНИЕ 3: Показываем уведомление (SnackBar) для пользователя
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isEditing ? 'Задача успешно обновлена!' : 'Новая задача создана!',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              backgroundColor: AppColors.primary,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
                         },
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
@@ -322,17 +324,13 @@ class HomePageState extends State<HomePage> {
                     ],
                   ),
                 ),
-
                 const Divider(color: Colors.white12, height: 1),
-
                 Expanded(
                   child: ListView(
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     children: [
                       buildSectionTitle('Основная информация'),
-
-                      // Название
                       TextField(
                         controller: titleController,
                         style: TextStyle(color: theme.colorScheme.onSurface),
@@ -340,7 +338,15 @@ class HomePageState extends State<HomePage> {
                           labelText: 'Название задачи',
                           labelStyle: TextStyle(color: theme.colorScheme.onSurface),
                           errorText: titleError,
-                          errorStyle: const TextStyle(color: Colors.orangeAccent),
+                          errorStyle: const TextStyle(color: Colors.redAccent),
+                          errorBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           enabledBorder: OutlineInputBorder(
                             borderSide: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.3)),
                             borderRadius: BorderRadius.circular(12),
@@ -359,8 +365,6 @@ class HomePageState extends State<HomePage> {
                         },
                       ),
                       const SizedBox(height: 20),
-
-                      // Описание
                       TextField(
                         controller: descriptionController,
                         maxLines: 3,
@@ -381,7 +385,6 @@ class HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(height: 28),
-
                       buildSectionTitle('Сложность'),
                       buildDifficultyDropdown(selectedDifficulty, (value) {
                         if (value != null) {
@@ -392,7 +395,6 @@ class HomePageState extends State<HomePage> {
                         }
                       }),
                       const SizedBox(height: 28),
-
                       buildSectionTitle('Сроки выполнения'),
                       buildDatePickerRow(
                         start: startDate,
@@ -407,19 +409,16 @@ class HomePageState extends State<HomePage> {
                           }
                         },
                         onPickEnd: () async {
-                          final picked = await pickDate(context,
-                              endDate ?? selectedDate); // Здесь лучше передавать текущую endDate, чтобы календарь открывался на ней
+                          final picked = await pickDate(context, endDate ?? selectedDate);
                           if (picked != null) {
                             setSheetState(() {
                               endDate = picked;
                             });
-                            // Звезды пересчитываются сразу после выбора даты
                             updateStars(setSheetState);
                           }
                         },
                       ),
                       const SizedBox(height: 28),
-
                       buildSectionTitle('Ожидаемая награда'),
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -1001,27 +1000,29 @@ class HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.all(12),
                 itemCount: _dayTasks.length,
                 itemBuilder: (context, index) {
+                  final task = _dayTasks[index];
                   return GestureDetector(
+                    key: ValueKey(identityHashCode(task)),
                     onLongPress: () async {
                       // 1. Открываем меню действий
-                      final String? action = await _showActionMenu(context, _dayTasks[index]);
+                      final String? action = await _showActionMenu(context, task);
 
                       if (action == 'edit') {
                         // 2. Ждем, пока пользователь отредактирует задачу
-                        await addTasksBottomSheet(taskToEdit: _dayTasks[index]);
+                        await addTasksBottomSheet(taskToEdit: task);
                         // 3. Обновляем главный экран (в режиме дня setState обновит всё сразу)
                         setState(() {});
                       } else if (action == 'delete') {
                         // 2. Удаляем из БД
-                        await controller.deleteTask(_dayTasks[index].id!);
+                        await controller.deleteTask(task.id!);
                         await _refreshCurrentView();
                         setState(() {});
                       }
                     },
                       child: TaskRowWidget(
-                      task: _dayTasks[index],
+                      task: task,
                       onDelete: () async {
-                        await controller.deleteTask(_dayTasks[index].id!);
+                        await controller.deleteTask(task.id!);
                         await _refreshCurrentView();
                       },
                       onChanged: (value) async {
@@ -1179,25 +1180,27 @@ class HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.all(12),
                 itemCount: _dayTasks.length,
                 itemBuilder: (context, index) {
+                  final task = _dayTasks[index];
                   return GestureDetector(
+                    key: ValueKey(identityHashCode(task)),
                     onLongPress: () async {
                       // 1. Открываем меню действий
-                      final String? action = await _showActionMenu(context, _dayTasks[index]);
+                      final String? action = await _showActionMenu(context, task);
 
                       if (action == 'edit') {
                         // 2. Ждем, пока пользователь отредактирует задачу
-                        await addTasksBottomSheet(taskToEdit: _dayTasks[index]);
+                        await addTasksBottomSheet(taskToEdit: task);
                         // 3. Обновляем главный экран (в режиме дня setState обновит всё сразу)
                         setState(() {});
                       } else if (action == 'delete') {
                         // 2. Удаляем из БД
-                        await controller.deleteTask(_dayTasks[index].id!);
+                        await controller.deleteTask(task.id!);
                         await _refreshCurrentView();
                         setState(() {});
                       }
                     },
                       child: TaskRowWidget(
-                      task: _dayTasks[index],
+                      task: task,
                       onDelete: () async {
                         await controller.deleteTask(_dayTasks[index].id!);
                         await _refreshCurrentView();

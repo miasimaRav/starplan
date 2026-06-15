@@ -114,7 +114,7 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   color: "#020b3b" # Заливаем весь экран этим цветом
-  image: "assets/images/app_icon.png" # Наша прозрачная звезда по центру
+  image: "assets/images/app_icon.png" # прозрачная звезда по центру
 
   android_12:
     image: "assets/images/app_icon.png"
