@@ -698,22 +698,22 @@ class DatabaseHelper {
     final db = await database;
 
     final result = await db.rawQuery('''
-      WITH dates AS (
-        SELECT DISTINCT date(start_date) as task_date 
-        FROM tasks 
-        WHERE completed = 1
-      )
-      SELECT MAX(streak) as record 
+    WITH dates AS (
+      SELECT DISTINCT date 
+      FROM task_progress 
+      WHERE completed = 1
+    )
+    SELECT IFNULL(MAX(streak), 0) as record 
+    FROM (
+      SELECT COUNT(*) as streak
       FROM (
-        SELECT COUNT(*) as streak
-        FROM (
-          SELECT task_date,
-                 JULIANDAY(task_date) - ROW_NUMBER() OVER (ORDER BY task_date) as grp
-          FROM dates
-        ) 
-        GROUP BY grp
-      )
-    ''');
+        SELECT date,
+               JULIANDAY(date) - ROW_NUMBER() OVER (ORDER BY date) as grp
+        FROM dates
+      ) 
+      GROUP BY grp
+    )
+  ''');
 
     return Sqflite.firstIntValue(result) ?? 0;
   }
